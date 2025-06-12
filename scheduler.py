@@ -19,6 +19,7 @@ class Scheduler:
 
     async def seed_url(self, url):
         """Seeds the initial URL into the queue."""
+
         await self.queue.put(url)   # this taks waits for queue.put(url) to complete befor moving on
 
     async def worker(self, fetcher, parser):
@@ -46,6 +47,14 @@ class Scheduler:
         
 
     async def run(self, fetcher, parser, num_workers=5):
-        """Starts the crawling loop with multiple concurrent workers."""
-        pass
+        """Starts the crawling loop with multiple concurrent workers.
+        Creates num_workers number of tasks.
+        Each one runs self.worker(fetcher, parser)
+        Uses asyncio.create_task() to run them concurrently
+        """
+
+        tasks = [asyncio.create_task(self.worker(fetcher, parser)) for _ in range(num_workers)]
+        await self.queue.join()  # wait for all items in queue to be fully processed
+        for t in tasks:
+            t.cancel()  # cancel all workers after done so it doesn't run forever
 
