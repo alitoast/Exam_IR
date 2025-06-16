@@ -29,6 +29,25 @@ class Scheduler:
         self.parser = Parser()
         self.storage = Storage()
 
+        """
+        Need to choose what's best either this with fixes cause is synchronous. 
+        Probably best to keeep the method later but
+        needs check cause r equires an async context to call this method. 
+        and needs to be called explicitly from outside after instantiation.
+
+        
+        # populate the frontier
+        for seed in seeds:
+            self.frontier.put_nowait(seed)
+        """
+
+    def get_hostname(self, url):
+        """
+        Needs to control crawl behavior
+        """
+        return urlparse(url).netloc
+            
+
     async def seed_url(self, url):
         """
         Seeds the initial URL into the queue.
@@ -50,8 +69,18 @@ class Scheduler:
 
             self.visited.add(url)   # marks the URL as visited
 
+            hostname = self.get_hostname(url)
+
             async with self.semaphore:
-                html = await fetcher.fetch(url) # request to fetch the page async
+                async with self.host_locks[hostname]:  # request to fetch per host at a time
+
+                    print(f"[Crawler] Fetching {url}")
+                    html = await self.fetcher.fetch(url) 
+
+            self.frontier.task_done()
+
+            if not html:
+                continue  # skip if fetch failed or blocked by robots.txt
 
             if html:
                 try:
@@ -68,7 +97,7 @@ class Scheduler:
                     if link not in self.visited:
                         await self.frontier.put(link)  # if not visited add to queue
 
-            self.frontier.task_done()
+            
         
 
     async def run(self, fetcher, parser, storage):
