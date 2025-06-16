@@ -25,6 +25,10 @@ class Scheduler:
         self.max_concurrency = max_concurrency
         self.semaphore = asyncio.Semaphore(max_concurrency) # limits how many fetches can happen at once
 
+        self.fetcher = Fetcher()
+        self.parser = Parser()
+        self.storage = Storage()
+
     async def seed_url(self, url):
         """
         Seeds the initial URL into the queue.
