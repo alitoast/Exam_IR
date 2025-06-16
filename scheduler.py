@@ -6,15 +6,21 @@ tasks that can run at the same time.
 
 will use asyncio semaphore for concurrency control, will ensure 
 only max_concurrency async tasks are allowed to run in parallel.
-"""
 
+"""
 import asyncio
-import storage
-import parser
+import time
+from urllib.parse import urlparse
+from collections import defaultdict
+
+from fetcher import Fetcher  # Eva
+from parser import Parser    # Eva
+from storage import Storage  # Francesca
+
 
 class Scheduler:
     def __init__(self, max_concurrency=5):
-        self.queue = asyncio.Queue()
+        self.frontier = asyncio.Queue()
         self.visited = set()    # tracks which URLs have been processed
         self.max_concurrency = max_concurrency
         self.semaphore = asyncio.Semaphore(max_concurrency) # limits how many fetches can happen at once
@@ -24,7 +30,7 @@ class Scheduler:
         Seeds the initial URL into the queue.
         """
 
-        await self.queue.put(url)   # this taks waits for queue.put(url) to complete befor moving on
+        await self.frontier.put(url)   # this taks waits for queue.put(url) to complete befor moving on
 
     async def worker(self, fetcher, parser, storage):
         """
@@ -32,10 +38,10 @@ class Scheduler:
         """
 
         while True:
-            url = await self.queue.get()    # waits asynchronously for a URL to be available in the queue
+            url = await self.frontier.get()    # waits asynchronously for a URL to be available in the queue
 
             if url in self.visited:
-                self.queue.task_done()
+                self.frontier.task_done()
                 continue
 
             self.visited.add(url)   # marks the URL as visited
@@ -56,9 +62,9 @@ class Scheduler:
 
                 for link in links:
                     if link not in self.visited:
-                        await self.queue.put(link)  # if not visited add to queue
+                        await self.frontier.put(link)  # if not visited add to queue
 
-            self.queue.task_done()
+            self.frontier.task_done()
         
 
     async def run(self, fetcher, parser, storage):
@@ -73,7 +79,7 @@ class Scheduler:
             asyncio.create_task(self.worker(fetcher, parser, storage)) for _ in range(self.max_concurrency)
             ]
 
-        await self.queue.join()  # wait for all items in queue to be fully processed
+        await self.frontier.join()  # wait for all items in queue to be fully processed
 
         for t in tasks:
             t.cancel()  # cancel all workers after done so it doesn't run forever
