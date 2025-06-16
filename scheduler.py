@@ -9,6 +9,8 @@ only max_concurrency async tasks are allowed to run in parallel.
 """
 
 import asyncio
+import storage
+import parser
 
 class Scheduler:
     def __init__(self, max_concurrency=5):
@@ -18,12 +20,16 @@ class Scheduler:
         self.semaphore = asyncio.Semaphore(max_concurrency) # limits how many fetches can happen at once
 
     async def seed_url(self, url):
-        """Seeds the initial URL into the queue."""
+        """
+        Seeds the initial URL into the queue.
+        """
 
         await self.queue.put(url)   # this taks waits for queue.put(url) to complete befor moving on
 
-    async def worker(self, fetcher, parser):
-        """Worker that pulls a URL, fetches it, parses it, and queues new links."""
+    async def worker(self, fetcher, parser, storage):
+        """
+        Worker that pulls a URL, fetches it, parses it, and queues new links.
+        """
 
         while True:
             url = await self.queue.get()    # waits asynchronously for a URL to be available in the queue
@@ -33,28 +39,42 @@ class Scheduler:
                 continue
 
             self.visited.add(url)   # marks the URL as visited
+
             async with self.semaphore:
                 html = await fetcher.fetch(url) # request to fetch the page async
 
-            if html: 
-                links = parser.extract_links(url,html)  # page fetched use parser to extract links from url
+            if html:
+                try:
+                    storage.save_page(url, html)
+                    print(f"[saved] {url}")
+
+                except Exception as e:
+                    print(f"[error saving] {url}: {e}")
+
+                # extract new links and queue them
+                links = parser.extract_links(url,html)  
 
                 for link in links:
                     if link not in self.visited:
                         await self.queue.put(link)  # if not visited add to queue
 
-            self.queue.task_done
+            self.queue.task_done()
         
 
-    async def run(self, fetcher, parser, num_workers=5):
-        """Starts the crawling loop with multiple concurrent workers.
+    async def run(self, fetcher, parser, storage):
+        """
+        Starts the crawling loop with multiple concurrent workers.
         Creates num_workers number of tasks.
         Each one runs self.worker(fetcher, parser)
         Uses asyncio.create_task() to run them concurrently
         """
 
-        tasks = [asyncio.create_task(self.worker(fetcher, parser)) for _ in range(num_workers)]
+        tasks = [
+            asyncio.create_task(self.worker(fetcher, parser, storage)) for _ in range(self.max_concurrency)
+            ]
+
         await self.queue.join()  # wait for all items in queue to be fully processed
+
         for t in tasks:
             t.cancel()  # cancel all workers after done so it doesn't run forever
 
