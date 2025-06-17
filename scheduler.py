@@ -48,6 +48,14 @@ class Scheduler:
             self.frontier.put_nowait(seed)
         """
 
+    async def add_url(self, url):
+        """
+        Add a new URL to the frontier if it hasn't been visited.
+        """
+        if url not in self.visited:
+            self.visited.add(url)
+            await self.frontier.put(url)
+
     async def seed_urls(self, urls):
         """
         Seeds the initial URL, or list of URLs, into the queue.
@@ -60,14 +68,6 @@ class Scheduler:
         Extract the hostname from a URL.
         """
         return urlparse(url).netloc
-    
-    async def add_url(self, url):
-        """
-        Add a new URL to the frontier if it hasn't been visited.
-        """
-        if url not in self.visited:
-            self.visited.add(url)
-            await self.frontier.put(url)
     
     async def get_url(self):
         """
@@ -96,35 +96,51 @@ class Scheduler:
             async with self.semaphore:
                 async with self.host_locks[hostname]:
                     print(f"[Crawler] Fetching {url}")
-                    response = await self.fetcher.fetch(url) 
+                    try:
+                    response = await self.fetcher.fetch(url)
+                    except Exception as e:
+                        print(f"[Error] Fetch failed for {url}: {e}")
+                        self.task_done()
+                        continue 
 
             self.task_done() 
 
             if not response:
+                print(f"[Warning] Empty response for {url}")
                 continue  # skip if fetch failed or blocked by robots.txt
-                
-            content, final_url, status = response
+            try: 
+                content, final_url, status = response
+            except Exception as e:
+                print(f"[Error] Unexpected response format from {url}: {e}")
+                continue
 
             # skip non-successful responses or empty content
             if status != 200 or not content:
+                print(f"[Info] Skipping {url} due to status {status} or empty content.")
+                continue
+            
+            try:
+                await self.storage.save_page(final_url, content)
+                print(f"[saved] {final_url}")
+            except Exception as e:
+                print(f"[Error] Failed to save {final_url}: {e}")
                 continue
 
-            await self.storage.save_page(final_url, content)
-            print(f"[saved] {final_url}")
+            try: # extract and enqueue links found in the page
+                links = self.parser.extract_links(content, final_url)  
+                for link in links:
+                    await self.add_url(link)  
+            except Exception as e:
+                print(f"[Error] Failed to parse links from {final_url}: {e}")     
 
-            # extract and enqueue links found in the page
-            links = self.parser.extract_links(content, final_url)  
-            for link in links:
-                await self.add_url(link)       
-
-    async def run(self):
+    async def run(self, seeds):
         """
         Starts the crawling loop with multiple concurrent spiders.
         Creates num_spiders number of tasks.
         Each one runs self.worker(fetcher, parser)
         Uses asyncio.create_task() to run them concurrently
         """
-        await self.seed_urls(["https://example.com"])        # it's a list so either change the input to the add_url
+        await self.seed_urls(seeds)
 
         spiders = [
             asyncio.create_task(self.spider()) for _ in range(self.num_spiders)
