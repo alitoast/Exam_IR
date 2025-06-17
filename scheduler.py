@@ -60,55 +60,70 @@ class Scheduler:
         """
         return urlparse(url).netloc
     
-
+    async def add_url(self, url):
+        """
+        Add a new URL to the frontier if it hasn't been visited.
+        """
+        if url not in self.visited:
+            await self.frontier.put(url)
+            self.visited.add(url)
     
-
+    async def get_url(self):
+        """
+        Get the next URL from the frontier.
+        Wait asynchronously for a URL to be available in the queue.
+        """
+        return await self.frontier.get()
+    
+    def task_done(self):
+        """
+        Mark the current task as completed in the frontier.
+        """
+        self.frontier.task_done()
+         
+    
     async def worker(self):
         """
         Worker that pulls a URL, fetches it, parses it, and queues new links.
         """
 
         while True:
-            url = await self.frontier.get()    # waits asynchronously for a URL to be available in the queue
+
+            url = await self.get_url()
 
             if url in self.visited:
-                self.frontier.task_done()
+                self.task_done()
                 continue
 
             self.visited.add(url)   # marks the URL as visited
-
             hostname = self.get_hostname(url)
 
+            # enforce both global fetch concurrency and per-host politeness
             async with self.semaphore:
-                async with self.host_locks[hostname]:  # request to fetch per host at a time
-
+                async with self.host_locks[hostname]:
                     print(f"[Crawler] Fetching {url}")
                     response = await self.fetcher.fetch(url) 
 
-            self.frontier.task_done()
+            self.task_done()
 
             if not response:
                 continue  # skip if fetch failed or blocked by robots.txt
                 
             content, final_url, status = response
 
+            # skip non-successful responses or empty content
             if status != 200 or not content:
                 continue
 
-            if response:
-                try:
-                    self.storage.save_page(final_url, content)
-                    print(f"[saved] {final_url}")
+            await self.storage.save_page(final_url, content)
+            print(f"[saved] {final_url}")
 
-                except Exception as e:
-                    print(f"[error saving] {final_url}: {e}")
+            
+            # extract and enqueue links found in the page
+            links = self.parser.extract_links(content, final_url)  
 
-                # extract new links and queue them
-                links = self.parser.extract_links(content, final_url)  
-
-                for link in links:
-                    if link not in self.visited:
-                        await self.frontier.put(link)  # if not visited add to queue
+            for link in links:
+                await self.add_url(link)
 
             
         
