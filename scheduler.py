@@ -7,6 +7,10 @@ tasks that can run at the same time.
 will use asyncio semaphore for concurrency control, will ensure 
 only max_concurrency async tasks are allowed to run in parallel.
 
+max_concurrent: Limits simultaneous fetches (via semaphore)
+
+num_workers: Number of async crawling tasks running concurrently
+
 """
 import asyncio
 import time
@@ -19,11 +23,13 @@ from storage import Storage  # Francesca
 
 
 class Scheduler:
-    def __init__(self, max_concurrency=5):
-        self.frontier = asyncio.Queue()
-        self.visited = set()    # tracks which URLs have been processed
+    def __init__(self, max_concurrency=5, num_workers=5):
+        self.frontier = asyncio.Queue()                         # URLs to crawl
+        self.visited = set()                                    # tracks visited URLs 
+        self.semaphore = asyncio.Semaphore(max_concurrency)     # limits max parallel fetches
+
         self.max_concurrency = max_concurrency
-        self.semaphore = asyncio.Semaphore(max_concurrency) # limits how many fetches can happen at once
+        self.num_workers = num_workers
 
         self.fetcher = Fetcher()
         self.parser = Parser()
@@ -41,19 +47,21 @@ class Scheduler:
             self.frontier.put_nowait(seed)
         """
 
-    def get_hostname(self, url):
-        """
-        Need to control crawl behavior
-        """
-        return urlparse(url).netloc
-            
-
     async def seed_url(self, url):
         """
         Seeds the initial URL into the queue.
         """
 
         await self.frontier.put(url)   # this taks waits for queue.put(url) to complete befor moving on
+
+    def get_hostname(self, url):
+        """
+        Extract the hostname from a URL.
+        """
+        return urlparse(url).netloc
+    
+
+    
 
     async def worker(self):
         """
@@ -114,7 +122,7 @@ class Scheduler:
         """
 
         tasks = [
-            asyncio.create_task(self.worker()) for _ in range(self.max_concurrency)
+            asyncio.create_task(self.worker()) for _ in range(self.num_workers)
             ]
 
         await self.frontier.join()  # wait for all items in queue to be fully processed
