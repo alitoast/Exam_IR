@@ -28,6 +28,7 @@ class Scheduler:
         self.visited = set()                                    # tracks visited URLs 
         self.semaphore = asyncio.Semaphore(max_concurrency)     # limits max parallel fetches
         self.host_locks = defaultdict(asyncio.Lock)             # ensures one fetch per host at a time
+        self.retries = defaultdict(int)                         # dictionary keeps count of how many times retried each URL
 
         self.max_concurrency = max_concurrency
         self.num_spiders = num_spiders
@@ -96,10 +97,16 @@ class Scheduler:
             async with self.semaphore:
                 async with self.host_locks[hostname]:
                     print(f"[Crawler] Fetching {url}")
+
                     try:
                     response = await self.fetcher.fetch(url)
+
                     except Exception as e:
                         print(f"[Error] Fetch failed for {url}: {e}")
+                        self.retries[url] += 1
+                        if self.retries[url] <= 2:
+                            print(f"[Retry] Re-queuing {url} (attempt {self.retries[url]})")
+                            await self.frontier.put(url)    # try again later
                         self.task_done()
                         continue 
 
@@ -108,8 +115,10 @@ class Scheduler:
             if not response:
                 print(f"[Warning] Empty response for {url}")
                 continue  # skip if fetch failed or blocked by robots.txt
+
             try: 
                 content, final_url, status = response
+
             except Exception as e:
                 print(f"[Error] Unexpected response format from {url}: {e}")
                 continue
@@ -122,6 +131,7 @@ class Scheduler:
             try:
                 await self.storage.save_page(final_url, content)
                 print(f"[saved] {final_url}")
+
             except Exception as e:
                 print(f"[Error] Failed to save {final_url}: {e}")
                 continue
@@ -129,7 +139,8 @@ class Scheduler:
             try: # extract and enqueue links found in the page
                 links = self.parser.extract_links(content, final_url)  
                 for link in links:
-                    await self.add_url(link)  
+                    await self.add_url(link)
+
             except Exception as e:
                 print(f"[Error] Failed to parse links from {final_url}: {e}")     
 
