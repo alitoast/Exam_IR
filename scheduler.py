@@ -27,6 +27,7 @@ class Scheduler:
         self.frontier = asyncio.Queue()                         # URLs to crawl
         self.visited = set()                                    # tracks visited URLs 
         self.semaphore = asyncio.Semaphore(max_concurrency)     # limits max parallel fetches
+        self.host_locks = defaultdict(asyncio.Lock)             # ensures one fetch per host at a time
 
         self.max_concurrency = max_concurrency
         self.num_spiders = num_spiders
