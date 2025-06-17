@@ -2,12 +2,13 @@
 import json
 import time
 import os
-import numpy as np
+import numpy as np 
+import nltk 
 from collections import Counter
 from simhash import Simhash 
+from nltk import pos_tag, word_tokenize
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
-from nltk import pos_tag, word_tokenize
 from nltk.corpus.reader.wordnet import NOUN, VERB, ADJ, ADV
 
 #   Functions imported from other modules of the project
@@ -96,10 +97,11 @@ def calculate_page_type(content):
     return "default"
 
 
+#   Class to manage the data 
 
 class Storage:
 
-    def __init__(self, pages_file="pages.json", index_file="inverted_index.json"):
+    def __init__(self, pages_file="data/pages.json", index_file="data/inverted_index.json"):
         self.pages_file = pages_file
         self.index_file = index_file
 
@@ -123,16 +125,37 @@ class Storage:
 
         # Save/Update page data
         self.pages[url] = {
-            "content": content,
             "fingerprint": fingerprint,
             "page_type": page_type,
-            "last_fetch": now
+            "last_fetch": now, 
+            "page_type": page_type 
         }
         self._save_json(self.pages_file, self.pages)
 
         # Update index terms automatically
-        self.index_terms(url)
+        self.index_terms(url, content)
 
+    def index_terms(self, url, content): 
+        words = preprocess(content)
+        tf = Counter(words)
+
+        # Remove old terms for this url from inverted index
+        for term in list(self.inverted_index.keys()):
+            if url in self.inverted_index[term]:
+                del self.inverted_index[term][url]
+                # Clean empty dict
+                if not self.inverted_index[term]:
+                    del self.inverted_index[term]
+
+        # Insert new tf for this url
+        for term, freq in tf.items():
+            if term not in self.inverted_index:
+                self.inverted_index[term] = {}
+            self.inverted_index[term][url] = freq
+
+        self._save_json(self.index_file, self.inverted_index)
+
+    """
     def index_terms(self, url):
         if url not in self.pages:
             raise ValueError(f"URL {url} not found in pages")
@@ -156,7 +179,8 @@ class Storage:
             self.inverted_index[term][url] = freq
 
         self._save_json(self.index_file, self.inverted_index)
-
+    """ 
+        
     def get_page(self, url):
         return self.pages.get(url)
 
@@ -196,14 +220,14 @@ class Storage:
     
 
     def is_near_duplicate(self, content, threshold=5):
-        new_fp = self.compute_fingerprint(content)
+        new_fp = compute_fingerprint(content)
     
         for url, page_data in self.pages.items():
             fp = page_data.get("fingerprint")
             if fp is None:
                 continue
             try:
-                d = self.hamming_distance(new_fp, int(fp))
+                d = hamming_distance(new_fp, fp)
                 if d <= threshold:
                     return True, url  # near duplicate found, optionally return url
             except Exception:
