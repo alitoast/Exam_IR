@@ -9,7 +9,7 @@ only max_concurrency async tasks are allowed to run in parallel.
 
 max_concurrent: Limits simultaneous fetches (via semaphore)
 
-num_workers: Number of async crawling tasks running concurrently
+num_spiders: Number of async crawling tasks running concurrently
 
 """
 import asyncio
@@ -23,13 +23,13 @@ from storage import Storage  # Francesca
 
 
 class Scheduler:
-    def __init__(self, max_concurrency=5, num_workers=5):
+    def __init__(self, max_concurrency=5, num_spiders=5):
         self.frontier = asyncio.Queue()                         # URLs to crawl
         self.visited = set()                                    # tracks visited URLs 
         self.semaphore = asyncio.Semaphore(max_concurrency)     # limits max parallel fetches
 
         self.max_concurrency = max_concurrency
-        self.num_workers = num_workers
+        self.num_spiders = num_spiders
 
         self.fetcher = Fetcher()
         self.parser = Parser()
@@ -82,9 +82,9 @@ class Scheduler:
         self.frontier.task_done()
          
     
-    async def worker(self):
+    async def spider(self):
         """
-        Worker that pulls a URL, fetches it, parses it, and queues new links.
+        Spider that pulls a URL, fetches it, parses it, and queues new links.
         """
 
         while True:
@@ -123,27 +123,24 @@ class Scheduler:
             links = self.parser.extract_links(content, final_url)  
 
             for link in links:
-                await self.add_url(link)
-
-            
-        
+                await self.add_url(link)       
 
     async def run(self):
         """
-        Starts the crawling loop with multiple concurrent workers.
-        Creates num_workers number of tasks.
+        Starts the crawling loop with multiple concurrent spiders.
+        Creates num_spiders number of tasks.
         Each one runs self.worker(fetcher, parser)
         Uses asyncio.create_task() to run them concurrently
         """
 
-        tasks = [
-            asyncio.create_task(self.worker()) for _ in range(self.num_workers)
+        spiders = [
+            asyncio.create_task(self.spider()) for _ in range(self.num_spiders)
             ]
 
         await self.frontier.join()  # wait for all items in queue to be fully processed
 
-        for t in tasks:
-            t.cancel()  # cancel all workers after done so it doesn't run forever
+        for s in spiders:
+            s.cancel()  # cancel all spiders after done so it doesn't run forever
 
         print(f"[Crawler] Finished. Total pages visited: {len(self.visited)}")
 
