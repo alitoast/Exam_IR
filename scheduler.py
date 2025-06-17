@@ -43,7 +43,7 @@ class Scheduler:
 
     def get_hostname(self, url):
         """
-        Needs to control crawl behavior
+        Need to control crawl behavior
         """
         return urlparse(url).netloc
             
@@ -55,7 +55,7 @@ class Scheduler:
 
         await self.frontier.put(url)   # this taks waits for queue.put(url) to complete befor moving on
 
-    async def worker(self, fetcher, parser, storage):
+    async def worker(self):
         """
         Worker that pulls a URL, fetches it, parses it, and queues new links.
         """
@@ -75,23 +75,24 @@ class Scheduler:
                 async with self.host_locks[hostname]:  # request to fetch per host at a time
 
                     print(f"[Crawler] Fetching {url}")
-                    html = await self.fetcher.fetch(url) 
+                    response = await self.fetcher.fetch(url) 
 
             self.frontier.task_done()
 
-            if not html:
+            if not response:
                 continue  # skip if fetch failed or blocked by robots.txt
-
-            if html:
+                
+            
+            if response:
                 try:
-                    storage.save_page(url, html)
+                    storage.save_page(url, response)
                     print(f"[saved] {url}")
 
                 except Exception as e:
                     print(f"[error saving] {url}: {e}")
 
                 # extract new links and queue them
-                links = parser.extract_links(url,html)  
+                links = self.parser.extract_links(url,response)  
 
                 for link in links:
                     if link not in self.visited:
@@ -100,7 +101,7 @@ class Scheduler:
             
         
 
-    async def run(self, fetcher, parser, storage):
+    async def run(self):
         """
         Starts the crawling loop with multiple concurrent workers.
         Creates num_workers number of tasks.
@@ -109,11 +110,13 @@ class Scheduler:
         """
 
         tasks = [
-            asyncio.create_task(self.worker(fetcher, parser, storage)) for _ in range(self.max_concurrency)
+            asyncio.create_task(self.worker()) for _ in range(self.max_concurrency)
             ]
 
         await self.frontier.join()  # wait for all items in queue to be fully processed
 
         for t in tasks:
             t.cancel()  # cancel all workers after done so it doesn't run forever
+
+        print(f"[Crawler] Finished. Total pages visited: {len(self.visited)}")
 
