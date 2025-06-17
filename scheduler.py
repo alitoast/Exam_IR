@@ -82,17 +82,21 @@ class Scheduler:
             if not response:
                 continue  # skip if fetch failed or blocked by robots.txt
                 
-            
+            content, final_url, status = response
+
+            if status != 200 or not content:
+                continue
+
             if response:
                 try:
-                    storage.save_page(url, response)
-                    print(f"[saved] {url}")
+                    self.storage.save_page(final_url, content)
+                    print(f"[saved] {final_url}")
 
                 except Exception as e:
-                    print(f"[error saving] {url}: {e}")
+                    print(f"[error saving] {final_url}: {e}")
 
                 # extract new links and queue them
-                links = self.parser.extract_links(url,response)  
+                links = self.parser.extract_links(content, final_url)  
 
                 for link in links:
                     if link not in self.visited:
