@@ -48,12 +48,12 @@ class Scheduler:
             self.frontier.put_nowait(seed)
         """
 
-    async def seed_url(self, url):
+    async def seed_urls(self, urls):
         """
-        Seeds the initial URL into the queue.
+        Seeds the initial URL, or list of URLs, into the queue.
         """
-
-        await self.frontier.put(url)   # this taks waits for queue.put(url) to complete befor moving on
+        for url in urls:
+            await self.add_url(url)   # passing it to add_url for check
 
     def get_hostname(self, url):
         """
@@ -66,8 +66,8 @@ class Scheduler:
         Add a new URL to the frontier if it hasn't been visited.
         """
         if url not in self.visited:
-            await self.frontier.put(url)
             self.visited.add(url)
+            await self.frontier.put(url)
     
     async def get_url(self):
         """
@@ -89,14 +89,7 @@ class Scheduler:
         """
 
         while True:
-
             url = await self.get_url()
-
-            if url in self.visited:
-                self.task_done()
-                continue
-
-            self.visited.add(url)   # marks the URL as visited
             hostname = self.get_hostname(url)
 
             # enforce both global fetch concurrency and per-host politeness
@@ -105,7 +98,7 @@ class Scheduler:
                     print(f"[Crawler] Fetching {url}")
                     response = await self.fetcher.fetch(url) 
 
-            self.task_done()
+            self.task_done() 
 
             if not response:
                 continue  # skip if fetch failed or blocked by robots.txt
@@ -119,10 +112,8 @@ class Scheduler:
             await self.storage.save_page(final_url, content)
             print(f"[saved] {final_url}")
 
-            
             # extract and enqueue links found in the page
             links = self.parser.extract_links(content, final_url)  
-
             for link in links:
                 await self.add_url(link)       
 
@@ -133,6 +124,7 @@ class Scheduler:
         Each one runs self.worker(fetcher, parser)
         Uses asyncio.create_task() to run them concurrently
         """
+        await self.seed_urls(["https://example.com"])        # it's a list so either change the input to the add_url
 
         spiders = [
             asyncio.create_task(self.spider()) for _ in range(self.num_spiders)
