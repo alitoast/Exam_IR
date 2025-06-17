@@ -1,59 +1,83 @@
-#   Implementare database
-#   Implementare funzione per near-duplicates 
-#   Implementare indici 
-#   Controllo freshness
-
 """
 SQLite is a C library that provides a lightweight disk-based database that doesn’t require 
 a separate server process and allows accessing the database using a nonstandard variant of the 
-SQL query language.
-I import it and use it to save and manage the data.
+SQL query language. It is imported and used it to save and manage data. 
+Time is necessary to manage time. lol
+Nltk (Naturale Language Toolkit) is a suite of libraries and programs for symbolic and 
+statistical natural language processing (NLP) for English. From this suite, several functions were
+imported.   
 """
-
-import sqlite3  # library to import      
+import sqlite3                      #   library to import      
 import time 
-import nltk # library to import 
+import nltk                         #   library to import 
+import numpy as np
 from nltk.corpus import stopwords 
 from nltk.stem import WordNetLemmatizer
 from nltk import pos_tag, word_tokenize 
 from nltk.corpus.reader.wordnet import NOUN, VERB, ADJ, ADV
 
-from simhash import Simhash
-from collections import Counter 
+"""
+From the simhash library I import the Simhash object to apply the algorithm.
+From the collections library I import the Counter object. 
+"""
+from simhash import Simhash         #   library to import 
+from collections import Counter     #   library to import 
+
 
 #   Functions imported from other modules 
 from fetcher import fetch 
-from parser import parse_page_tags
+from parser import parse_page_tags_all 
 
+
+#   Download necessary NLTK resources 
 nltk.download('stopwords')
 nltk.download('wordnet') 
 nltk.download('punkt')
-nltk.download('punkt_tab')
 nltk.download('averaged_perceptron_tagger_eng')  
 nltk.download('omw-1.4')
 
 
-#   Functions that will be useful 
+
+LAMBDA_BY_TYPE = {
+    "frequent": 2.0, 
+    "occasional": 1.0,
+    "static": 0.05,
+    "default": 0.5 
+}
+
+
+#   Function to map POS tags from Treebank to Wordnet    
 
 def get_wordnet_pos(treebank_tag): 
+
     if treebank_tag.startswith('J'):
         return ADJ
+
     elif treebank_tag.startswith('V'):
         return VERB
+
     elif treebank_tag.startswith('N'):
         return NOUN
+
     elif treebank_tag.startswith('R'):
         return ADV
+
     else:
         return NOUN  # default
 
 
 #   Given the url, it returns the content of the page as a string.
-#   Da completare  
 
 def content_page(url): 
-    html = fetch(url)
 
+    html = fetch(url)
+    text_from_page = parse_page_tags_all(html)
+    content_page = ' '.join(text_from_page)
+
+    return content_page 
+    
+
+#   Function to preprocess the content of a page before indexing the terms contained in it 
 
 def preprocess(text): 
 
@@ -65,11 +89,14 @@ def preprocess(text):
     #   Lemmatizer 
     lemmatizer = WordNetLemmatizer()
 
+    #   These words are not in the stop words set, but I do not want them in the index, so they 
+    #   will be removed 
     number_words = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten']
 
     #   Remove stop words, number_words and punctuation 
     words = [w for w in words if w.isalpha() and w not in stop_words and w not in number_words]
 
+    #   Each words is coupled with 
     tagged_words = pos_tag(words)
 
     #   Lemmatization is done using the correct grammatical type 
@@ -78,23 +105,68 @@ def preprocess(text):
     return lemmatized_words
 
 
+#   Given the text, this function computes its Simhash fingerprint 
+
 def compute_fingerprint(text):
     
     words = preprocess(text)
     return Simhash(words).value
 
 
-def hamming_distance(fp1, fp2): 
+#   Given two fingerprint, this function computes the hamming distance between them.
+#   It will be used to check if two texts are near-duplicates or not 
+
+def hamming_distance(fp1, fp2):
+
     x = (fp1 ^ fp2) & ((1 << 64) - 1)
     distance = 0
     while x:
         distance += 1
         x &= x - 1
+
     return distance
 
 
+#   Function that computes the age, given: 
+#   -   Lambda: number of times per day the page is changed 
+#   -   t: days since the last crawl 
 
-class StorageDB : 
+def compute_age(lambda_, t): 
+
+    return (t+lambda_*np.exp(-lambda_*t)-1)/lambda_
+
+
+#   Function that etermines the type of the page based on its content keywords
+
+def calculate_page_type(content):
+
+    content = content.lower() 
+
+    frequent_keywords = ["breaking news", "live updates", "report", "news"]         #   lambda = 2 
+    occasional_keywords = ["calendar", "workshop", "conference", "event"]           #   lambda = 1
+    static_keywords = ["contacts", "about us", "company info", "privacy policy"]    #   lambda = 0.05 
+
+    #   for default I use lambda = 0.5 
+
+    is_frequent = any(word in content for word in frequent_keywords)
+    is_occasional = any(word in content for word in occasional_keywords)
+    is_static = any(word in content for word in static_keywords)
+
+    if is_frequent: 
+        return "frequent"
+    elif is_occasional: 
+        return "occasional"
+    elif is_static:
+        return "static"
+    else:
+        return "default" 
+
+
+
+#   Class that manages the SQLite storage, including pages and inverted index
+
+
+class Storage : 
 
     def __init__(self, db_path="/data/storage.db"):
         self.conn = sqlite3.connect(db_path)
@@ -115,12 +187,14 @@ class StorageDB :
     """
 
     def _create_tables(self): 
+        
         self.conn.execute('''
         CREATE TABLE IF NOT EXISTS pages(
             id INTEGER PRIMARY KEY AUTOINCREMENT, 
             url TEXT,
             content TEXT, 
-            fingerprint TEXT,
+            fingerprint INTEGER,
+            page_type TEXT, 
             last_fetch TIMESTAMP 
         )
         ''')
@@ -136,18 +210,32 @@ class StorageDB :
         ''')
 
         self.conn.commit()
-
-
+    
+    
+    #   Save or update a page on the database 
     def save_page(self, url, content, fingerprint):    
         
         now = time.time() 
+        type = calculate_page_type(content) 
+
         self.conn.execute('''
-        INSERT OR REPLACE INTO pages (url, content, fingerprint, last_fetch)
+        INSERT OR REPLACE INTO pages (url, content, fingerprint, page_type, last_fetch)
         VALUES(?, ?, ?, ?)
-        ''', (url, content, fingerprint, now))
+        ''', (url, content, fingerprint, type, now))
+        
         self.conn.commit() 
 
 
+    #   Retrieve the type of the page with a given url 
+    def get_page_type(self, url): 
+
+        cursor = self.conn.cursor() 
+        cursor.execute('SELECT page_type FROM pages WHERE url = ?', (url,))
+        result = cursor.fetchone() 
+        return result[0] if result else None
+
+
+    #   Retrieve the time where a page with a given url was last fetched 
     def get_last_fetch(self, url): 
 
         cursor = self.conn.cursor() 
@@ -156,7 +244,7 @@ class StorageDB :
         return result[0] if result else None
 
 
-    #   Not sure this function is necessary    
+    #   Retrieve the fingerprint of a page with a given url     
     def get_fingerprint(self, url): 
 
         cursor = self.conn.cursor() 
@@ -169,17 +257,8 @@ class StorageDB :
         return result[0] if result else None 
 
 
-    ''' Given an url, which was saved in the table pages, index_terms extract the important terms
-        that are present in the document, it calculates tf and it adds them in the inverted index.
-        First, I preprocess the content of the page, in order to index only the "important" terms. 
-        There are a few steps:
-        -   all the letters are converted to lower  
-        -   togliere stop words
-        -   stemming/lemmatization 
-    '''
-
-    #   This method can be called only after the "page" and its characteristics have been saved
-    #   in the table pages 
+    #   Given an url, which was saved in the table pages, index_terms extract the important terms
+    #   that are present in the document, it calculates tf and it adds them in the inverted index.
 
     def index_terms(self, url): 
         cursor = self.conn.cursor()
@@ -207,15 +286,12 @@ class StorageDB :
         self.conn.commit()
 
 
-    """
-    
-    """
-
+    #   It checks whether a content is the near-duplicate of a content saved in the pages table
     def is_near_duplicate(self, content, threshold=5):
         
         new_fp = compute_fingerprint(content) 
         cursor = self.conn.cursor() 
-        cursor.execute('SELECT url, fingerprint WHERE fingerprint IS NOT NULL')
+        cursor.execute('SELECT url, fingerprint FROM pages WHERE fingerprint IS NOT NULL')
         rows = cursor.fetchall()
 
         for url, fp in rows:
@@ -233,34 +309,35 @@ class StorageDB :
     
 
     """
-    Check for freshness: is it better to use freshness or age? 
-    I think age is better. 
+    Check for freshness: I used age for determining the freshness or not of a page. 
 
-    3 ways to implement it: 
-    1.  Constant value of lambda 
-    2.  Value that depends on how often the page changes. For this we need to have a history of the 
-        changes --> necessary to use another table page_changes
-    3.  Value that depends on page type or domain --> how to implement it 
-
-    I will start with way 1 with lambda_ = 0.01
-
-    code to add in scheduler.py 
-
-    from storage import Storage
-
-    storage = Storage() 
+    This function will state if a page needs to be fetched again by defining lambda dynamically by 
+    looking at the "type of page". 
+    In fact, different pages are being updated at different frequency depending on the type of content:
+    a news page is probably updated multiple times per day, while the contacts page of a company is 
+    probably updated once a month. 
     
-    def should_refresh(self, url):    
-
-           
     """
+    def needs_refresh(self, url):   
+        last_fetch = self.get_last_fetch(url)
+        
+        if last_fetch is None: 
+            return True
 
-    """
-    Funzioni che non ho ancora implementato 
+        page_type = self.get_page_type(url)
+        now = time.time() 
 
-    def needs_refresh(): 
+        time_in_days = (now - last_fetch)/86400 
 
+        lambda_ = LAMBDA_BY_TYPE.get(page_type)
+
+        threshold = 1 / lambda_
+
+        age = compute_age(lambda_, time_in_days)
+
+        return age > threshold 
+
+
+    #   Close the database connection    
     def close(self):
         self.conn.close() 
-
-"""
