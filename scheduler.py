@@ -142,5 +142,6 @@ class Scheduler:
         for s in spiders:
             s.cancel()  # cancel all spiders after done so it doesn't run forever
 
+        await asyncio.gather(*spiders, return_exceptions=True)
         print(f"[Crawler] Finished. Total pages visited: {len(self.visited)}")
 
