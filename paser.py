@@ -75,6 +75,15 @@ Ensure that `fetch()` (from the fetcher module) is available in the context when
 """
 
 
+# Setup logging configuration
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%H:%M:%S'
+)
+
+logger = logging.getLogger(__name__)
+
 
 
 def normalize_url(url):
@@ -101,7 +110,7 @@ def normalize_url(url):
       return uri.unsplit()
 
   except Exception as e:
-      print(f"Errore nella normalizzazione URL: {url} – {e}")
+      logger.error("Error, impossble to normalize %s: %s", url, e)
       return url
 
 def check_spider_traps(url):
@@ -163,7 +172,7 @@ def parse_sitemap(sitemap_list):
     all_entries = []
 
     if not sitemap_list:
-        print("Nessuna sitemap fornita.")
+        logger.warning("No sitemap available.")
         return pd.DataFrame(columns=['url', 'priority', 'update'])
 
     def parse_single_sitemap(sitemap_url):
@@ -171,7 +180,7 @@ def parse_sitemap(sitemap_list):
             response = requests.get(sitemap_url, timeout=10)
             response.raise_for_status()
         except requests.RequestException as e:
-            print(f"Errore durante il recupero di {sitemap_url}: {e}")
+            logger.error("Error, impossibile to fetch %s: %s", sitemap_url, e)
             return []
 
         content_type = response.headers.get("Content-Type", "").lower()
@@ -181,7 +190,7 @@ def parse_sitemap(sitemap_list):
             try:
                 root = ET.fromstring(response.content)
             except ET.ParseError as e:
-                print(f"Errore nel parsing XML: {e}")
+                logger.error("Error into XML parsing %s: %s", sitemap_url, e)
                 return []
 
             # If it's a sitemap index, recursively parse child sitemaps
@@ -210,7 +219,7 @@ def parse_sitemap(sitemap_list):
             } for a in soup.find_all('a', href=True)]
 
         else:
-            print(f"Formato non riconosciuto per {sitemap_url} ({content_type})")
+            logger.warning("Format unknown %s (%s)", sitemap_url, content_type)
             return []
 
     #  Process each sitemap URL in the list
@@ -228,6 +237,7 @@ def parse_sitemap(sitemap_list):
     df = pd.DataFrame(all_entries, columns=['url', 'priority', 'update']).drop_duplicates()
 
     return df
+
 
 def parse_page_url(html,sitemaps_urls,useragent=default_agent):
 
