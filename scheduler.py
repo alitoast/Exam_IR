@@ -14,13 +14,9 @@ from urllib.parse import urlparse
 from collections import defaultdict
 import logging
 
-
 from fetcher import Fetcher  
 from parser import Parser    
-"""
-from storage import Storage  # Francesca
-"""
-from mock import Storage
+from storage import Storage  
 
 # logging set up
 logging.basicConfig(
@@ -47,7 +43,7 @@ class Scheduler:
 
         self.fetcher = Fetcher()
         self.parser = Parser()
-        self.storage = Storage
+        self.storage = Storage ()
  
     async def add_url(self, url):
         """
@@ -113,11 +109,15 @@ class Scheduler:
                     duration = time.perf_counter() - start_time
                     logger.info(f"Fetched {url} in {duration:.2f}s")
                     return response
+                except aiohttp.ClientError as e:
+                    duration = time.perf_counter() - start_time
+                    logger.error(f"Fetch failed for {url} after {duration:.2f}s: {e}")
+                    await self.handle_fetch_failure(url, e)
+                    return None
                 except Exception as e:
                     duration = time.perf_counter() - start_time
                     logger.error(f"Fetch failed for {url} after {duration:.2f}s: {e}")
                     await self.handle_fetch_failure(url, e)
-                    self.task_done()        ## MAYBE NOT THIS but the log then is wrong
                     return None
 
     async def process_response(self, url, response):
