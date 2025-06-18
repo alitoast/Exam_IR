@@ -25,7 +25,7 @@ from storage import Storage  # Francesca
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s", # timestamp, level, message
-    datefmt="%H:%M:%S"
+    datefmt="%H:%M:%S",
     filename="crawler.log",  # log file
     filemode="a"  # append to the log file ('w' to overwrite)
 )
@@ -56,8 +56,8 @@ class Scheduler:
         Add a new URL to the frontier if it hasn't been visited.
         """
         if url not in self.visited:
-            self.visited.add(url)
             await self.frontier.put(url)
+            self.visited.add(url)
 
     async def seed_urls(self, urls):
         """
@@ -182,12 +182,3 @@ class Scheduler:
 
         await asyncio.gather(*spiders, return_exceptions=True)
         logger.info(f"Finished. Total pages visited: {len(self.visited)}")
-
-
-if __name__ == "__main__":
-    import asyncio
-
-    scheduler = Scheduler(max_concurrency=3, num_spiders=2)
-
-    # Test with a custom seed
-    asyncio.run(scheduler.run(["https://example.com/start"]))
