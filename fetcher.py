@@ -77,12 +77,12 @@ start_url = "https://nonciclopedia.org/wiki/Wikipedia"
 
 
 # Useragents
-useragent_dict = {"Googlebot": UserAgentPolicy("Googlebot",None, None, None, None, 1e9,'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'),
-                  "Bingbot": UserAgentPolicy("Bingbot",None, None, None, None, 1e9,'Mozilla/5.0 (compatible; Bingbot/2.0; +http://www.bing.com/bingbot.htm)'),
-                  "Slurp": UserAgentPolicy("Slurp",None, None, None, None, 1e9, 'Mozilla/5.0 (compatible; Yahoo! Slurp; http://help.yahoo.com/help/us/ysearch/slurp)'),
-                  "DuckDuckbot": UserAgentPolicy("DuckDuckbot",None, None, None, None, 1e9,'DuckDuckBot/1.0; (+http://duckduckgo.com/duckduckbot.html)' ),
-                  "Yandex": UserAgentPolicy("Yandex",None, None, None, None, 1e9,'Mozilla/5.0 (compatible; YandexBot/3.0; +http://yandex.com/bots)' ),
-                  "*": UserAgentPolicy("*",None, None, None, None, 1e9,'Mozilla/5.0 (compatible; MyBot/1.0; +http://example.com/bot)' )
+useragent_dict = {"Googlebot": UserAgentPolicy("Googlebot",None, None, None, None, 1e9,'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',set()),
+                  "Bingbot": UserAgentPolicy("Bingbot",None, None, None, None, 1e9,'Mozilla/5.0 (compatible; Bingbot/2.0; +http://www.bing.com/bingbot.htm)'),set(),
+                  "Slurp": UserAgentPolicy("Slurp",None, None, None, None, 1e9, 'Mozilla/5.0 (compatible; Yahoo! Slurp; http://help.yahoo.com/help/us/ysearch/slurp)',set()),
+                  "DuckDuckbot": UserAgentPolicy("DuckDuckbot",None, None, None, None, 1e9,'DuckDuckBot/1.0; (+http://duckduckgo.com/duckduckbot.html)',set()),
+                  "Yandex": UserAgentPolicy("Yandex",None, None, None, None, 1e9,'Mozilla/5.0 (compatible; YandexBot/3.0; +http://yandex.com/bots)',set()),
+                  "*": UserAgentPolicy("*",None, None, None, None, 1e9,'Mozilla/5.0 (compatible; MyBot/1.0; +http://example.com/bot)',set())
                   }
 default_agent = useragent_dict["Googlebot"]
 
@@ -99,7 +99,7 @@ class UserAgentPolicy:
   '''
      Class to identify user agents and store relevant information to manage their requests appropriately over time
   '''
-  def __init__(self, name, base_url, path_disallow, crawl_delay, request_rate,last_access, header):
+  def __init__(self, name, base_url, path_disallow, crawl_delay, request_rate,last_access, header, visualized):
         self.base_url = base_url
         self.name = name
         self.path_disallow = path_disallow
@@ -107,6 +107,7 @@ class UserAgentPolicy:
         self.request_rate = request_rate
         self.last_access = last_access
         self.header = header
+        self.visualized = visualized
 
 # Setup logging configuration
 logging.basicConfig(
@@ -224,9 +225,6 @@ def check_time(useragent=default_agent):
   useragent.last_access = time.monotonic_ns()
 
 
-visulized_url = set()
-
-
 def fetch(url,useragent=default_agent):
   '''
     Inputs:
@@ -242,7 +240,7 @@ def fetch(url,useragent=default_agent):
     '''
 
   # Check if the page is been visited alredy
-  if url not in visulized_url:
+  if url not in useragent.visualized:
 
     # Enforce crawl delay and request rate restrictions for the user agent
     check_time(useragent)
@@ -262,7 +260,7 @@ def fetch(url,useragent=default_agent):
          return html
        else:
           loggin.warning("Page not available")
-        return None
+          return None
 
     # Handle any request-related exceptions (connection errors, timeouts, etc.)
     except requests.RequestException as e:
