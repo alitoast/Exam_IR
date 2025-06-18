@@ -99,7 +99,7 @@ class UserAgentPolicy:
   '''
      Class to identify user agents and store relevant information to manage their requests appropriately over time
   '''
-  def __init__(self, name, base_url, path_disallow, crawl_delay, request_rate,last_access, header, visualized):
+  def __init__(self, name, base_url, path_disallow, crawl_delay, request_rate,last_access, header, visited):
         self.base_url = base_url
         self.name = name
         self.path_disallow = path_disallow
@@ -107,7 +107,7 @@ class UserAgentPolicy:
         self.request_rate = request_rate
         self.last_access = last_access
         self.header = header
-        self.visualized = visualized
+        self.visited = visited
 
 # Setup logging configuration
 logging.basicConfig(
@@ -240,7 +240,7 @@ def fetch(url,useragent=default_agent):
     '''
 
   # Check if the page is been visited alredy
-  if url not in useragent.visualized:
+  if url not in useragent.visited:
 
     # Enforce crawl delay and request rate restrictions for the user agent
     check_time(useragent)
@@ -256,7 +256,7 @@ def fetch(url,useragent=default_agent):
        if response.status_code == 200:
          logging.info("Page successfully recovered")
          html = response.text
-         visulized_url.add(url)
+         useragent.visited.add(url)
          return html
        else:
           loggin.warning("Page not available")
