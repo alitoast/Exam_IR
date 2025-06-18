@@ -1,3 +1,17 @@
+"""
+Storage module (Asynchronous)
+
+The Storage module provides persistent management and indexing of web page data. 
+It handles loading and saving page metadata and an inverted index from JSON files asynchronously with 
+proper locking to ensure data consistency during concurrent access. The module supports operations 
+such as saving new page content, updating the inverted index with term frequencies and positions, 
+checking for page refresh needs based on custom aging heuristics, and detecting near-duplicate pages 
+via Simhash fingerprinting. 
+It acts as the core component for storing, retrieving, and maintaining up-to-date page information 
+efficiently.
+
+"""
+
 #   ----- Libraries and resources to import -----
 
 #   Libraries to import 
@@ -6,36 +20,12 @@ import asyncio
 import json
 import time
 import os
-import numpy as np 
-import nltk 
 from collections import Counter
-from simhash import Simhash 
-from nltk import pos_tag, word_tokenize
-from nltk.corpus import stopwords
-from nltk.stem import WordNetLemmatizer
-from nltk.corpus.reader.wordnet import NOUN, VERB, ADJ, ADV
 import logging
 
+from utilsasync import calculate_page_type, compute_fingerprint, preprocess, to_gap_encoding, compute_age, hamming_distance
+
 logger = logging.getLogger(__name__)
-
-#   Functions imported from other modules of the project
-#from fetcher import fetch 
-#from parser import parse_page_tags_all 
-
-from fetcherasync import fetch 
-from parser import parse_page_tags_all
-
-
-#   Check if the necessary NLTK resources have been downloaded. Otherwise, download them.
-for resource in ["stopwords", "wordnet", "punkt", "averaged_perceptron_tagger", "omw-1.4"]:
-    try:
-        nltk.data.find(f"corpora/{resource}")
-    except LookupError:
-        nltk.download(resource, quiet=True)
-
-
-
-#   ----- Constants -----
 
 
 #   Lambda mapping for different page types 
@@ -46,110 +36,60 @@ LAMBDA_BY_TYPE = {
     "default": 0.5
 }
 
-#   Words to remove during preprocessing 
-NUMBER_WORDS = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten']
 
-
-
-#   ----- Utility functions  -----
-
-def get_wordnet_pos(tag):
-    """
-    Maps POS tag to WordNet format.
-    Input: Penn Treebank POS tag (string)
-    Output: WordNet-compatible tag (constant)
-    """
-    if tag.startswith('J'): return ADJ
-    if tag.startswith('V'): return VERB
-    if tag.startswith('N'): return NOUN
-    if tag.startswith('R'): return ADV
-    return NOUN
-
-def preprocess_sync(text):
-    """
-    Synchronous text preprocessing.
-    Input: Raw text (string)
-    Output: List of lemmatized, filtered tokens (list of strings)
-    """
-    stop_words = set(stopwords.words("english"))
-    lemmatizer = WordNetLemmatizer()
-    words = word_tokenize(text.lower())
-    words = [w for w in words if w.isalpha() and w not in stop_words and w not in NUMBER_WORDS]
-    tagged_words = pos_tag(words)
-    return [lemmatizer.lemmatize(w, get_wordnet_pos(t)) for w, t in tagged_words]
-
-async def preprocess(text):
-    
-    return await asyncio.to_thread(preprocess_sync, text)
-
-async def content_page(url):
-    from fetcherasync import fetch
-    from parser import parse_page_tags_all
-    html = await fetch(url)
-    text_from_page = parse_page_tags_all(html)
-    return ' '.join(text_from_page)
-
-def compute_fingerprint(text):
-    # Questo rimane sync, chiamare preprocess async esternamente se serve
-    words = preprocess_sync(text)
-    return Simhash(words).value
-
-def hamming_distance(fp1, fp2):
-    x = (fp1 ^ fp2) & ((1 << 64) - 1)
-    distance = 0
-    while x:
-        distance += 1
-        x &= x - 1
-    return distance
-
-def compute_age(lambda_, t):
-    if lambda_ == 0:
-        return t
-    return (t + lambda_ * np.exp(-lambda_ * t) - 1) / lambda_
-
-def calculate_page_type(content, url=""):
-    # stessa funzione di prima
-    content = content.lower()
-    url = url.lower()
-    if "guardian" in url or "cnn.com" in url or "bbc.com" in url:
-        if "live" in content and "update" in content:
-            return "frequent"
-    if "wikipedia.org/wiki/" in url:
-        return "static"
-    if "live" in url or "breaking" in url:
-        return "frequent"
-    if any(k in url for k in ["calendar", "event", "workshop", "conference"]):
-        return "occasional"
-    if any(k in url for k in ["about", "privacy", "contact", "terms"]):
-        return "static"
-    frequent_keywords = ["breaking news", "live updates", "as it happens", "developing story"]
-    occasional_keywords = ["calendar", "workshop", "conference", "event", "seminar"]
-    static_keywords = ["contact us", "about us", "privacy policy", "company info", "terms of service"]
-    freq_count = sum(kw in content for kw in frequent_keywords)
-    occas_count = sum(kw in content for kw in occasional_keywords)
-    static_count = sum(kw in content for kw in static_keywords)
-    if freq_count >= 2:
-        return "frequent"
-    if occas_count >= 1:
-        return "occasional"
-    if static_count >= 1:
-        return "static"
-    return "default"
-
-def from_gap_encoding(gaps):
-    if not gaps:
-        return []
-    positions = [gaps[0]]
-    for gap in gaps[1:]:
-        positions.append(positions[-1] + gap)
-    return positions
-
-def to_gap_encoding(positions):
-    if not positions:
-        return []
-    return [positions[0]] + [positions[i] - positions[i-1] for i in range(1, len(positions))]
 
 class Storage:
+
+    """
+    Asynchronous storage manager for pages metadata and inverted index.
+
+    Attributes:
+        pages_file (str): Path to the JSON file storing pages metadata.
+        index_file (str): Path to the JSON file storing inverted index.
+        pages (dict): In-memory dictionary of pages metadata.
+        inverted_index (dict): In-memory inverted index mapping terms to postings.
+        _lock (asyncio.Lock): Async lock to protect concurrent file access.
+
+    Methods:
+        __init__(pages_file, index_file):
+            Initializes storage, loads data from disk synchronously.
+
+        _load_json_async(filename):
+            Loads JSON file asynchronously, returns dict or None.
+
+        _save_json_async(filename, data):
+            Saves data as JSON asynchronously under lock.
+
+        save_page(url, content):
+            Saves a page's metadata and indexes its terms asynchronously.
+
+        index_terms(url, content, lock_acquired=False):
+            Indexes terms of a page asynchronously, optionally assuming lock is held.
+
+        _index_terms_internal(url, content):
+            Internal method to perform term indexing and update inverted index.
+
+        get_page(url):
+            Retrieves metadata dictionary for a given URL.
+
+        get_page_type(url):
+            Retrieves the type classification of a stored page.
+
+        get_last_fetch(url):
+            Retrieves the last fetch timestamp of a stored page.
+
+        get_tf(term):
+            Retrieves term frequency postings for a term.
+
+        needs_refresh(url):
+            Determines if a page should be re-fetched based on its age and type.
+
+        is_near_duplicate(content, threshold=5):
+            Checks if the content is near-duplicate of any stored page.
+
+        commit():
+            Saves pages metadata and inverted index to disk asynchronously.
+    """
 
     def __init__(self, pages_file="data/pages.json", index_file="data/inverted_index.json"):
         self.pages_file = pages_file
@@ -178,6 +118,16 @@ class Storage:
             except Exception as e:
                 logger.error(f"Failed to save JSON file {filename}: {e}")
 
+    def _load_json_sync(self, filename):
+        if not os.path.exists(filename):
+            return None
+        try:
+            with open(filename, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            logger.error(f"Errore nel caricamento di {filename}: {e}")
+            return None
+
     async def save_page(self, url, content):
         async with self._lock: 
             now = time.time()
@@ -199,6 +149,7 @@ class Storage:
                 await self._index_terms_internal(url, content)
         else:
             await self._index_terms_internal(url, content)
+
 
     async def _index_terms_internal(self, url, content):
         if url not in self.pages:
