@@ -42,7 +42,7 @@ class Scheduler:
         self.seen = set()   # tracks seen URLs
         self.visited = set()    # tracks visited URLs 
         self.semaphore = asyncio.Semaphore(max_concurrency) # limits max parallel fetches
-        self.host_locks = defaultdict(asyncio.Lock) # ensures one fetch per host at a time
+        self.host_locks = defaultdict(asyncio.Lock) #{}  # ensures one fetch per host at a time WILL REUSE SAME LOCK?
         self.retries = defaultdict(int) # dictionary keeps count of how many times retried each URL
 
         self.max_concurrency = max_concurrency
@@ -51,6 +51,12 @@ class Scheduler:
         self.fetcher = Fetcher()
         self.parser = Parser()
         self.storage = Storage()
+
+    #def get_host_lock(self, hostname):
+    #    if hostname not in self.host_locks:
+    #        self.host_locks[hostname] = asyncio.Lock()
+    #    return self.host_locks[hostname]
+    
 
     async def add_url(self, url):
         """
@@ -108,7 +114,7 @@ class Scheduler:
 
         # enforce both global fetch concurrency and per-host politeness
         async with self.semaphore:
-            async with self.host_locks[hostname]:
+            async with self.host_locks[hostname]: ## get_host_lock(hostname)
                 logger.info(f"Fetching {url}")
                 start_time = time.perf_counter()    # want to measure time taken for each request
                 try:
@@ -120,7 +126,7 @@ class Scheduler:
                     duration = time.perf_counter() - start_time
                     logger.error(f"Fetch failed for {url} after {duration:.2f}s: {e}")
                     await self.handle_fetch_failure(url, e)
-                    self.task_done()
+                    self.task_done()        ## MAYBE NOT THIS but the log then is wrong
                     return None
 
     async def process_response(self, url, response):
@@ -181,15 +187,15 @@ class Scheduler:
         if not seeds:
             seeds = ["https://example.com"]
 
+        async with self.fetcher:  # manages aiohttp session
+            await self.seed_urls(seeds)
+            spiders = [asyncio.create_task(self.spider()) for _ in range(self.num_spiders)]
 
-        await self.seed_urls(seeds)
-        spiders = [asyncio.create_task(self.spider()) for _ in range(self.num_spiders)]
+            await self.frontier.join()  # wait for all items in queue to be fully processed
+            for s in spiders:
+                s.cancel()  # cancel all spiders after done so it doesn't run forever
 
-        await self.frontier.join()  # wait for all items in queue to be fully processed
-        for s in spiders:
-            s.cancel()  # cancel all spiders after done so it doesn't run forever
-
-        await asyncio.gather(*spiders, return_exceptions=True)
-        logger.info("Crawling finished.")
-        logger.info(f"Total seen URLs: {len(self.seen)}")
-        logger.info(f"Total successfully visited URLs: {len(self.visited)}")
+            await asyncio.gather(*spiders, return_exceptions=True)
+            logger.info("Crawling finished.")
+            logger.info(f"Total seen URLs: {len(self.seen)}")
+            logger.info(f"Total successfully visited URLs: {len(self.visited)}")
