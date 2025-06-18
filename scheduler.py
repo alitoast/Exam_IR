@@ -5,6 +5,8 @@ max_concurrent: Limits simultaneous fetches (via semaphore)
 
 num_spiders: Number of async crawling tasks running concurrently
 
+maybe defaultdict for lock and retries ain't a good idea, to see if it's best to 
+place general dictionary 
 """
 import asyncio
 import aiohttp
@@ -50,7 +52,8 @@ class Scheduler:
         """
         if url not in self.seen:
             self.seen.add(url)
-            await self.frontier.put(url) 
+            await self.frontier.put(url)
+            logger.info(f"Added URL to frontier: {url}")
 
     async def seed_urls(self, urls):
         """
@@ -70,14 +73,17 @@ class Scheduler:
         Get the next URL from the frontier.
         Wait asynchronously for a URL to be available in the queue.
         """
-        return await self.frontier.get()
-    
+        url = await self.frontier.get()
+        logger.info(f"Got URL from frontier: {url}")
+        return url
+
     def task_done(self):
         """
         Mark the current task as completed in the frontier.
         """
         self.frontier.task_done()
-         
+        logger.info(f"Task done. Frontier size: {self.frontier.qsize()}")
+
     async def handle_fetch_failure(self, url, exception):
         """
         Handles a failed fetch attempt: retries up to 2 times.
@@ -100,9 +106,9 @@ class Scheduler:
 
         # enforce both global fetch concurrency and per-host politeness
         async with self.semaphore:
-            async with self.host_locks[hostname]: ## get_host_lock(hostname)
+            async with self.host_locks[hostname]:
                 logger.info(f"Fetching {url}")
-                start_time = time.perf_counter()    # want to measure time taken for each request
+                start_time = time.perf_counter()  # want to measure time taken for each request
                 try:
                     response = await self.fetcher.fetch(url)
                     duration = time.perf_counter() - start_time
@@ -111,6 +117,10 @@ class Scheduler:
                 except aiohttp.ClientError as e:
                     duration = time.perf_counter() - start_time
                     logger.error(f"Fetch failed for {url} after {duration:.2f}s: {e}")
+                    await self.handle_fetch_failure(url, e)
+                    return None
+                except aiohttp.client_exceptions.InvalidURL as e:
+                    logger.error(f"Invalid URL for {url}: {e}")
                     await self.handle_fetch_failure(url, e)
                     return None
                 except Exception as e:
@@ -144,9 +154,9 @@ class Scheduler:
         except Exception as e:
             logger.error(f"Failed to save {final_url}: {e}")
             return
-        
+
         # mark as successfully visited only after processing
-        self.visited.add(final_url) 
+        self.visited.add(final_url)
 
         try:
             # Extract and enqueue links found in the page
@@ -164,7 +174,7 @@ class Scheduler:
             url = await self.get_url()
             response = await self.fetch_url(url)
             await self.process_response(url, response)
-            self.task_done()      
+            self.task_done()
 
     async def run(self, seeds=None):
         """
@@ -173,7 +183,6 @@ class Scheduler:
         Each one runs self.worker(fetcher, parser)
         Uses asyncio.create_task() to run them concurrently
         """
-
         if not seeds:
             seeds = ["https://example.com"]
 

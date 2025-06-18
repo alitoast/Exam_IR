@@ -218,3 +218,55 @@ NameError: name 'aiohttp' is not defined
 21:43:37 [INFO] Crawling finished.
 21:43:37 [INFO] Total seen URLs: 2
 21:43:37 [INFO] Total successfully visited URLs: 0
+21:48:38 [INFO] Got URL from frontier: https://example.com
+21:48:38 [INFO] Fetching https://example.com
+21:48:38 [WARNING] Could not read robots.txt for ://: unknown url type: ':///robots.txt'
+21:48:38 [ERROR] Client error while fetching URIReference(scheme='https', authority='example.com', path=None, query=None, fragment=None): URIReference(scheme='https',%20authority='example.com',%20path=None,%20query=None,%20fragment=None)
+21:48:38 [ERROR] Fetch failed for https://example.com after 0.00s: URIReference(scheme='https',%20authority='example.com',%20path=None,%20query=None,%20fragment=None)
+21:48:38 [ERROR] Fetch failed for https://example.com: URIReference(scheme='https',%20authority='example.com',%20path=None,%20query=None,%20fragment=None)
+21:48:38 [INFO] Re-queuing https://example.com (attempt 1)
+21:48:38 [WARNING] Empty response for https://example.com
+21:48:38 [INFO] Task done. Frontier size: 2
+21:48:38 [INFO] Got URL from frontier: https://news.ycombinator.com
+21:48:38 [INFO] Fetching https://news.ycombinator.com
+21:48:38 [INFO] Got URL from frontier: https://example.com
+21:48:38 [INFO] Fetching https://example.com
+21:48:39 [ERROR] Client error while fetching URIReference(scheme='https', authority='example.com', path=None, query=None, fragment=None): URIReference(scheme='https',%20authority='example.com',%20path=None,%20query=None,%20fragment=None)
+21:48:39 [ERROR] Fetch failed for https://example.com after 1.50s: URIReference(scheme='https',%20authority='example.com',%20path=None,%20query=None,%20fragment=None)
+21:48:39 [ERROR] Fetch failed for https://example.com: URIReference(scheme='https',%20authority='example.com',%20path=None,%20query=None,%20fragment=None)
+21:48:39 [INFO] Re-queuing https://example.com (attempt 2)
+21:48:39 [WARNING] Empty response for https://example.com
+21:48:39 [INFO] Task done. Frontier size: 1
+21:48:39 [INFO] Got URL from frontier: https://example.com
+21:48:39 [INFO] Fetching https://example.com
+21:48:39 [ERROR] Client error while fetching URIReference(scheme='https', authority='news.ycombinator.com', path=None, query=None, fragment=None): URIReference(scheme='https',%20authority='news.ycombinator.com',%20path=None,%20query=None,%20fragment=None)
+21:48:39 [ERROR] Fetch failed for https://news.ycombinator.com after 1.50s: URIReference(scheme='https',%20authority='news.ycombinator.com',%20path=None,%20query=None,%20fragment=None)
+21:48:39 [ERROR] Fetch failed for https://news.ycombinator.com: URIReference(scheme='https',%20authority='news.ycombinator.com',%20path=None,%20query=None,%20fragment=None)
+21:48:39 [INFO] Re-queuing https://news.ycombinator.com (attempt 1)
+21:48:39 [WARNING] Empty response for https://news.ycombinator.com
+21:48:39 [INFO] Task done. Frontier size: 1
+21:48:39 [INFO] Got URL from frontier: https://news.ycombinator.com
+21:48:39 [INFO] Fetching https://news.ycombinator.com
+21:48:41 [ERROR] Client error while fetching URIReference(scheme='https', authority='example.com', path=None, query=None, fragment=None): URIReference(scheme='https',%20authority='example.com',%20path=None,%20query=None,%20fragment=None)
+21:48:41 [ERROR] Fetch failed for https://example.com after 1.50s: URIReference(scheme='https',%20authority='example.com',%20path=None,%20query=None,%20fragment=None)
+21:48:41 [ERROR] Fetch failed for https://example.com: URIReference(scheme='https',%20authority='example.com',%20path=None,%20query=None,%20fragment=None)
+21:48:41 [INFO] Giving up on https://example.com after 3 attempts.
+21:48:41 [WARNING] Empty response for https://example.com
+21:48:41 [INFO] Task done. Frontier size: 0
+21:48:41 [ERROR] Client error while fetching URIReference(scheme='https', authority='news.ycombinator.com', path=None, query=None, fragment=None): URIReference(scheme='https',%20authority='news.ycombinator.com',%20path=None,%20query=None,%20fragment=None)
+21:48:41 [ERROR] Fetch failed for https://news.ycombinator.com after 1.50s: URIReference(scheme='https',%20authority='news.ycombinator.com',%20path=None,%20query=None,%20fragment=None)
+21:48:41 [ERROR] Fetch failed for https://news.ycombinator.com: URIReference(scheme='https',%20authority='news.ycombinator.com',%20path=None,%20query=None,%20fragment=None)
+21:48:41 [INFO] Re-queuing https://news.ycombinator.com (attempt 2)
+21:48:41 [WARNING] Empty response for https://news.ycombinator.com
+21:48:41 [INFO] Task done. Frontier size: 1
+21:48:41 [INFO] Got URL from frontier: https://news.ycombinator.com
+21:48:41 [INFO] Fetching https://news.ycombinator.com
+21:48:42 [ERROR] Client error while fetching URIReference(scheme='https', authority='news.ycombinator.com', path=None, query=None, fragment=None): URIReference(scheme='https',%20authority='news.ycombinator.com',%20path=None,%20query=None,%20fragment=None)
+21:48:42 [ERROR] Fetch failed for https://news.ycombinator.com after 1.50s: URIReference(scheme='https',%20authority='news.ycombinator.com',%20path=None,%20query=None,%20fragment=None)
+21:48:42 [ERROR] Fetch failed for https://news.ycombinator.com: URIReference(scheme='https',%20authority='news.ycombinator.com',%20path=None,%20query=None,%20fragment=None)
+21:48:42 [INFO] Giving up on https://news.ycombinator.com after 3 attempts.
+21:48:42 [WARNING] Empty response for https://news.ycombinator.com
+21:48:42 [INFO] Task done. Frontier size: 0
+21:48:42 [INFO] Crawling finished.
+21:48:42 [INFO] Total seen URLs: 2
+21:48:42 [INFO] Total successfully visited URLs: 0
