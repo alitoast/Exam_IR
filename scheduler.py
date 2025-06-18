@@ -14,9 +14,10 @@ from urllib.parse import urlparse
 from collections import defaultdict
 import logging
 
-"""
+
 from fetcher import Fetcher  # Eva
 from parser import Parser    # Eva
+"""
 from storage import Storage  # Francesca
 """
 
@@ -33,7 +34,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-from mock import Fetcher, Parser, Storage
+from mock import Storage
 
 
 class Scheduler:
@@ -48,16 +49,10 @@ class Scheduler:
         self.max_concurrency = max_concurrency
         self.num_spiders = num_spiders
 
-        self.fetcher = Fetcher()
-        self.parser = Parser()
-        self.storage = Storage()
-
-    #def get_host_lock(self, hostname):
-    #    if hostname not in self.host_locks:
-    #        self.host_locks[hostname] = asyncio.Lock()
-    #    return self.host_locks[hostname]
-    
-
+        self.fetcher = Fetcher
+        self.parser = Parser
+        self.storage = Storage
+ 
     async def add_url(self, url):
         """
         Add a new URL to the frontier if it hasn't been seen.
