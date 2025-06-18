@@ -5,10 +5,9 @@ max_concurrent: Limits simultaneous fetches (via semaphore)
 
 num_spiders: Number of async crawling tasks running concurrently
 
-implemented logging 
-
 """
 import asyncio
+import aiohttp
 import time
 from urllib.parse import urlparse
 from collections import defaultdict

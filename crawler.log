@@ -143,3 +143,78 @@ Traceback (most recent call last):
   File "/home/toast/Documents/data_science/infoRetr/Exam_IR/scheduler.py", line 166, in spider
   File "/home/toast/Documents/data_science/infoRetr/Exam_IR/scheduler.py", line 112, in fetch_url
 NameError: name 'aiohttp' is not defined
+21:41:33 [INFO] Fetching https://example.com
+21:41:33 [WARNING] Could not read robots.txt for ://: unknown url type: ':///robots.txt'
+21:41:33 [ERROR] Client error while fetching URIReference(scheme='https', authority='example.com', path=None, query=None, fragment=None): URIReference(scheme='https',%20authority='example.com',%20path=None,%20query=None,%20fragment=None)
+21:41:33 [INFO] Fetching https://news.ycombinator.com
+21:41:34 [ERROR] Client error while fetching URIReference(scheme='https', authority='news.ycombinator.com', path=None, query=None, fragment=None): URIReference(scheme='https',%20authority='news.ycombinator.com',%20path=None,%20query=None,%20fragment=None)
+21:42:14 [ERROR] Task exception was never retrieved
+future: <Task finished name='Task-3' coro=<Scheduler.spider() done, defined at /home/toast/Documents/data_science/infoRetr/Exam_IR/scheduler.py:158> exception=NameError("name 'aiohttp' is not defined")>
+Traceback (most recent call last):
+  File "/home/toast/Documents/data_science/infoRetr/Exam_IR/scheduler.py", line 106, in fetch_url
+  File "/home/toast/Documents/data_science/infoRetr/Exam_IR/fetcher.py", line 130, in fetch
+  File "/home/toast/miniconda3/envs/inf_retr/lib/python3.13/site-packages/aiohttp/client.py", line 1482, in __aenter__
+  File "/home/toast/miniconda3/envs/inf_retr/lib/python3.13/site-packages/aiohttp/client.py", line 637, in _request
+aiohttp.client_exceptions.InvalidUrlClientError: URIReference(scheme='https',%20authority='news.ycombinator.com',%20path=None,%20query=None,%20fragment=None)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/toast/Documents/data_science/infoRetr/Exam_IR/scheduler.py", line 164, in spider
+  File "/home/toast/Documents/data_science/infoRetr/Exam_IR/scheduler.py", line 110, in fetch_url
+NameError: name 'aiohttp' is not defined
+21:42:14 [ERROR] Task exception was never retrieved
+future: <Task finished name='Task-2' coro=<Scheduler.spider() done, defined at /home/toast/Documents/data_science/infoRetr/Exam_IR/scheduler.py:158> exception=NameError("name 'aiohttp' is not defined")>
+Traceback (most recent call last):
+  File "/home/toast/Documents/data_science/infoRetr/Exam_IR/scheduler.py", line 106, in fetch_url
+  File "/home/toast/Documents/data_science/infoRetr/Exam_IR/fetcher.py", line 130, in fetch
+  File "/home/toast/miniconda3/envs/inf_retr/lib/python3.13/site-packages/aiohttp/client.py", line 1482, in __aenter__
+  File "/home/toast/miniconda3/envs/inf_retr/lib/python3.13/site-packages/aiohttp/client.py", line 637, in _request
+aiohttp.client_exceptions.InvalidUrlClientError: URIReference(scheme='https',%20authority='example.com',%20path=None,%20query=None,%20fragment=None)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/toast/Documents/data_science/infoRetr/Exam_IR/scheduler.py", line 164, in spider
+  File "/home/toast/Documents/data_science/infoRetr/Exam_IR/scheduler.py", line 110, in fetch_url
+NameError: name 'aiohttp' is not defined
+21:43:32 [INFO] Fetching https://example.com
+21:43:32 [WARNING] Could not read robots.txt for ://: unknown url type: ':///robots.txt'
+21:43:32 [ERROR] Client error while fetching URIReference(scheme='https', authority='example.com', path=None, query=None, fragment=None): URIReference(scheme='https',%20authority='example.com',%20path=None,%20query=None,%20fragment=None)
+21:43:32 [ERROR] Fetch failed for https://example.com after 0.00s: URIReference(scheme='https',%20authority='example.com',%20path=None,%20query=None,%20fragment=None)
+21:43:32 [ERROR] Fetch failed for https://example.com: URIReference(scheme='https',%20authority='example.com',%20path=None,%20query=None,%20fragment=None)
+21:43:32 [INFO] Re-queuing https://example.com (attempt 1)
+21:43:32 [WARNING] Empty response for https://example.com
+21:43:32 [INFO] Fetching https://news.ycombinator.com
+21:43:32 [INFO] Fetching https://example.com
+21:43:34 [ERROR] Client error while fetching URIReference(scheme='https', authority='example.com', path=None, query=None, fragment=None): URIReference(scheme='https',%20authority='example.com',%20path=None,%20query=None,%20fragment=None)
+21:43:34 [ERROR] Fetch failed for https://example.com after 1.50s: URIReference(scheme='https',%20authority='example.com',%20path=None,%20query=None,%20fragment=None)
+21:43:34 [ERROR] Fetch failed for https://example.com: URIReference(scheme='https',%20authority='example.com',%20path=None,%20query=None,%20fragment=None)
+21:43:34 [INFO] Re-queuing https://example.com (attempt 2)
+21:43:34 [WARNING] Empty response for https://example.com
+21:43:34 [INFO] Fetching https://example.com
+21:43:34 [ERROR] Client error while fetching URIReference(scheme='https', authority='news.ycombinator.com', path=None, query=None, fragment=None): URIReference(scheme='https',%20authority='news.ycombinator.com',%20path=None,%20query=None,%20fragment=None)
+21:43:34 [ERROR] Fetch failed for https://news.ycombinator.com after 1.50s: URIReference(scheme='https',%20authority='news.ycombinator.com',%20path=None,%20query=None,%20fragment=None)
+21:43:34 [ERROR] Fetch failed for https://news.ycombinator.com: URIReference(scheme='https',%20authority='news.ycombinator.com',%20path=None,%20query=None,%20fragment=None)
+21:43:34 [INFO] Re-queuing https://news.ycombinator.com (attempt 1)
+21:43:34 [WARNING] Empty response for https://news.ycombinator.com
+21:43:34 [INFO] Fetching https://news.ycombinator.com
+21:43:35 [ERROR] Client error while fetching URIReference(scheme='https', authority='example.com', path=None, query=None, fragment=None): URIReference(scheme='https',%20authority='example.com',%20path=None,%20query=None,%20fragment=None)
+21:43:35 [ERROR] Fetch failed for https://example.com after 1.50s: URIReference(scheme='https',%20authority='example.com',%20path=None,%20query=None,%20fragment=None)
+21:43:35 [ERROR] Fetch failed for https://example.com: URIReference(scheme='https',%20authority='example.com',%20path=None,%20query=None,%20fragment=None)
+21:43:35 [INFO] Giving up on https://example.com after 3 attempts.
+21:43:35 [WARNING] Empty response for https://example.com
+21:43:35 [ERROR] Client error while fetching URIReference(scheme='https', authority='news.ycombinator.com', path=None, query=None, fragment=None): URIReference(scheme='https',%20authority='news.ycombinator.com',%20path=None,%20query=None,%20fragment=None)
+21:43:35 [ERROR] Fetch failed for https://news.ycombinator.com after 1.50s: URIReference(scheme='https',%20authority='news.ycombinator.com',%20path=None,%20query=None,%20fragment=None)
+21:43:35 [ERROR] Fetch failed for https://news.ycombinator.com: URIReference(scheme='https',%20authority='news.ycombinator.com',%20path=None,%20query=None,%20fragment=None)
+21:43:35 [INFO] Re-queuing https://news.ycombinator.com (attempt 2)
+21:43:35 [WARNING] Empty response for https://news.ycombinator.com
+21:43:35 [INFO] Fetching https://news.ycombinator.com
+21:43:37 [ERROR] Client error while fetching URIReference(scheme='https', authority='news.ycombinator.com', path=None, query=None, fragment=None): URIReference(scheme='https',%20authority='news.ycombinator.com',%20path=None,%20query=None,%20fragment=None)
+21:43:37 [ERROR] Fetch failed for https://news.ycombinator.com after 1.50s: URIReference(scheme='https',%20authority='news.ycombinator.com',%20path=None,%20query=None,%20fragment=None)
+21:43:37 [ERROR] Fetch failed for https://news.ycombinator.com: URIReference(scheme='https',%20authority='news.ycombinator.com',%20path=None,%20query=None,%20fragment=None)
+21:43:37 [INFO] Giving up on https://news.ycombinator.com after 3 attempts.
+21:43:37 [WARNING] Empty response for https://news.ycombinator.com
+21:43:37 [INFO] Crawling finished.
+21:43:37 [INFO] Total seen URLs: 2
+21:43:37 [INFO] Total successfully visited URLs: 0
