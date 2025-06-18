@@ -8,6 +8,7 @@ from scheduler import Scheduler
 async def main():
     # Download necessary NLTK data
     nltk.download('punkt_tab', quiet=True)
+    nltk.download('averaged_perceptron_tagger_eng', quiet=True)
 
     # Initialize components
     storage = Storage()
