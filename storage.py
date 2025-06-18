@@ -148,6 +148,14 @@ def from_gap_encoding(gaps):
         positions.append(positions[-1] + gap)
     return positions
 
+"""
+Given a list of absolute positions, it returns the gap-encoded positions.
+Ex: [4, 7, 15] → [4, 3, 8]
+"""
+def to_gap_encoding(positions):
+    if not positions:
+        return []
+    return [positions[0]] + [positions[i] - positions[i-1] for i in range(1, len(positions))]
 
 
 #   Class to manage the data 
@@ -182,9 +190,8 @@ class Storage:
             "page_type": page_type,
             "last_fetch": now 
         }
-        self._save_json(self.pages_file, self.pages)
 
-        # Update index terms automatically
+        # Update index terms automatically (not on the disk)
         self.index_terms(url, content)
 
     
@@ -208,14 +215,7 @@ class Storage:
         # Perform position gap encoding:
         # For each word, store the list of position *gaps* instead of absolute positions
         for word in positions:
-            pos_list = positions[word]
-            if len(pos_list) > 1:
-                # Convert absolute positions to gap-encoded positions for compression
-                gaps = [pos_list[0]] + [pos_list[i] - pos_list[i-1] for i in range(1, len(pos_list))]
-                positions[word] = gaps  # update with gaps
-            else:
-                # If the word appears only once, keep the position as is
-                positions[word] = pos_list  
+            positions[word] = to_gap_encoding(positions[word]) 
 
         # Remove existing entries in the inverted index for this URL
         # This avoids duplicating or mixing old and new data
@@ -239,7 +239,6 @@ class Storage:
         
 
     def get_page(self, url):
-        
         return self.pages.get(url)
 
 
@@ -311,5 +310,16 @@ class Storage:
                     return True, url  # near duplicate found, return url
             except Exception:
                 continue
-            
-        return False, None  # tthe content is not a near-duplicate 
+
+        return False, None  # the content is not a near-duplicate 
+    
+
+    #   Save the data on the disk 
+    def commit(self):
+        self._save_json(self.pages_file, self.pages)
+        self._save_json(self.index_file, self.inverted_index)
+
+
+    #   Method to be called at the end, it saves the data on the disk 
+    def close(self):
+        self.commit()
