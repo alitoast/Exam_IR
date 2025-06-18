@@ -1,21 +1,18 @@
 """
-will implement async crawler to avoid blocking on requests.
-
-max_concurrency will set the maximum number of concurrent 
-tasks that can run at the same time.
-
-will use asyncio semaphore for concurrency control, will ensure 
-only max_concurrency async tasks are allowed to run in parallel.
+implement async crawler to avoid blocking on requests.
 
 max_concurrent: Limits simultaneous fetches (via semaphore)
 
 num_spiders: Number of async crawling tasks running concurrently
+
+implemented logging 
 
 """
 import asyncio
 import time
 from urllib.parse import urlparse
 from collections import defaultdict
+import logging
 
 """
 from fetcher import Fetcher  # Eva
@@ -23,7 +20,21 @@ from parser import Parser    # Eva
 from storage import Storage  # Francesca
 """
 
+
+# logging set up
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s", # timestamp, level, message
+    datefmt="%H:%M:%S"
+    filename="crawler.log",  # log file
+    filemode="a"  # append to the log file ('w' to overwrite)
+)
+
+logger = logging.getLogger(__name__)
+
+
 from mock import Fetcher, Parser, Storage
+
 
 class Scheduler:
     def __init__(self, max_concurrency, num_spiders):
@@ -78,14 +89,14 @@ class Scheduler:
         """
         Handles a failed fetch attempt: retries up to 2 times.
         """
-        print(f"[Error] Fetch failed for {url}: {exception}")
+        logger.error(f"Fetch failed for {url}: {exception}")
         self.retries[url] += 1
 
         if self.retries[url] <= 2:
-            print(f"[Retry] Re-queuing {url} (attempt {self.retries[url]})")
+            logger.info(f"Re-queuing {url} (attempt {self.retries[url]})")
             await self.frontier.put(url)
         else:
-            print(f"[Retry] Giving up on {url} after {self.retries[url]} attempts.")
+            logger.info(f"Giving up on {url} after {self.retries[url]} attempts.")
 
     async def fetch_url(self, url):
         """
@@ -97,7 +108,7 @@ class Scheduler:
         # enforce both global fetch concurrency and per-host politeness
         async with self.semaphore:
             async with self.host_locks[hostname]:
-                print(f"[Crawler] Fetching {url}")
+                logger.info(f"Fetching {url}")
                 try:
                     response = await self.fetcher.fetch(url)
                     return response
@@ -111,25 +122,25 @@ class Scheduler:
         Handles a successful fetch: parses, stores, and queues new URLs.
         """
         if not response:
-            print(f"[Warning] Empty response for {url}")
+            logger.warning(f"Empty response for {url}")
             return
 
         try:
             content, final_url, status = response
         except Exception as e:
-            print(f"[Error] Unexpected response format from {url}: {e}")
+            logger.error(f"Unexpected response format from {url}: {e}")
             return
 
         # Skip non-successful responses or empty content
         if status != 200 or not content:
-            print(f"[Info] Skipping {url} due to status {status} or empty content.")
+            logger.info(f"Skipping {url} due to status {status} or empty content.")
             return
 
         try:
             await self.storage.save_page(final_url, content)
-            print(f"Saved {final_url}")
+            logger.info(f"Saved {final_url}")
         except Exception as e:
-            print(f"[Error] Failed to save {final_url}: {e}")
+            logger.error(f"Failed to save {final_url}: {e}")
             return
 
         try:
@@ -138,7 +149,7 @@ class Scheduler:
             for link in links:
                 await self.add_url(link)
         except Exception as e:
-            print(f"[Error] Failed to parse links from {final_url}: {e}")
+            logger.error(f"Failed to parse links from {final_url}: {e}")
 
     async def spider(self):
         """
@@ -163,16 +174,14 @@ class Scheduler:
 
 
         await self.seed_urls(seeds)
-
         spiders = [asyncio.create_task(self.spider()) for _ in range(self.num_spiders)]
 
         await self.frontier.join()  # wait for all items in queue to be fully processed
-
         for s in spiders:
             s.cancel()  # cancel all spiders after done so it doesn't run forever
 
         await asyncio.gather(*spiders, return_exceptions=True)
-        print(f"[Crawler] Finished. Total pages visited: {len(self.visited)}")
+        logger.info(f"Finished. Total pages visited: {len(self.visited)}")
 
 
 if __name__ == "__main__":
