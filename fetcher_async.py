@@ -207,11 +207,11 @@ async def check_robots(url,useragent=default_agent):
   useragent.path_disallow = path_disallow
 
   # Retrieve the crawl delay (minimum interval between requests)
-  crawl_delay = rfl.crawl_delay(useragent)
+  crawl_delay = rfl.crawl_delay(useragent.name)
   useragent.crawl_delay = crawl_delay
 
   # Retrieve the request rate (tuple of requests per time interval)
-  request_rate = rfl.request_rate(useragent)
+  request_rate = rfl.request_rate(useragent.name)
   useragent.request_rate = request_rate
 
   # Retrieve any sitemap URLs declared in the robots.txt
