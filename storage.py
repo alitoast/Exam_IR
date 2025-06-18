@@ -1,3 +1,31 @@
+""""
+Storage Module 
+====================
+
+This module provides utilities and storage management for web page content processing and indexing.
+It includes functions for preprocessing text data, computing content fingerprints using Simhash, 
+classifying pages by update frequency, and managing an inverted index for efficient term-based retrieval. 
+The Storage class manages persistence of pages and the inverted index, and provides freshness and 
+near-duplicate detection based on content fingerprints.
+
+Main functionalities:
+- Text preprocessing with tokenization, stopword removal, POS tagging, and lemmatization
+- Page content fetching and parsing integration with fetcher and parser modules 
+- Fingerprint calculation using Simhash for near-duplicate detection
+- Page type classification to adapt crawling frequency
+- Inverted index creation with gap-encoded word positions for efficient storage
+- Storage management with JSON-based persistence
+
+
+Dependencies 
+------------------
+To use this module, install: 
+- nltk 
+- numpy 
+- simhash
+"""
+
+
 #   ----- Libraries and resources to import -----
 
 #   Libraries to import 
@@ -14,9 +42,12 @@ from nltk.stem import WordNetLemmatizer
 from nltk.corpus.reader.wordnet import NOUN, VERB, ADJ, ADV
 
 
-#   Functions imported from other modules of the project
+#   Functions imported from other modules of the project:
+#   - from fetcher import fetch 
+#   - from parser import parse_page_tags_all 
+
 from fetcher import fetch 
-from parser import parse_page_tags_all 
+from parser import parse_page_tags_all
 
 
 #   Check if the necessary NLTK resources have been downloaded. Otherwise, download them.
@@ -47,7 +78,17 @@ NUMBER_WORDS = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 
 #   ----- Utility functions  -----
 
 def get_wordnet_pos(tag):
-    """ Map POS tags from Treebank to Wordnet """
+    """ 
+    Input:
+        tag (str): POS tag from nltk.pos_tag (Treebank format)
+
+    Output:
+        wordnet_tag (str): Corresponding WordNet POS tag (NOUN, VERB, ADJ, ADV)
+
+    Description:
+        This function converts POS tags from the Penn Treebank tagset used by NLTK's pos_tag
+        to the WordNet POS tags needed by the lemmatizer for accurate lemmatization.
+    """
     if tag.startswith('J'): return ADJ
     if tag.startswith('V'): return VERB
     if tag.startswith('N'): return NOUN
@@ -57,10 +98,16 @@ def get_wordnet_pos(tag):
 
 def preprocess(text):
     """
-    Preprocesses the page content:
-    - Lowercases and tokenizes text
-    - Removes stop words, numbers and punctuation
-    - Lemmatizes each word using POS tags
+    Input:
+        text (str): Raw text content of a web page
+
+    Output:
+        List[str]: List of lemmatized tokens after stopword, number, and punctuation removal
+
+    Description:
+        The function lowercases and tokenizes the input text, removes stop words, 
+        number words (e.g. 'one', 'two'), and punctuation. Then, it tags each word with its
+        POS and lemmatizes the words using WordNet's lemmatizer to normalize word forms.
     """
     stop_words = set(stopwords.words("english"))
     lemmatizer = WordNetLemmatizer()
@@ -76,7 +123,18 @@ def preprocess(text):
 
 
 def content_page(url): 
-    """ Given the url of a web page, returns the content of the page as a string """
+    """ 
+    Input:
+        url (str): URL of the web page to fetch
+
+    Output:
+        str: Extracted text content of the page
+
+    Description:
+        Uses the function fetch() from module fetcher to download HTML content of the given URL,
+        then uses the function parse_page_tags_all() to extract all textual content from HTML tags,
+        returning a single concatenated string.
+    """
     html = fetch(url)
     text_from_page = parse_page_tags_all(html)
     content_page = ' '.join(text_from_page)
@@ -84,14 +142,34 @@ def content_page(url):
 
 
 def compute_fingerprint(text):
-    """ Given a text, computes its Simhash fingerprint. """
+    """ 
+    Input:
+        text (str): Preprocessed or raw text content
+
+    Output:
+        int: 64-bit Simhash fingerprint value
+
+    Description:
+        The text is preprocessed into lemmatized tokens, then Simhash
+        algorithm generates a fingerprint representing the content's features,
+        useful for near-duplicate detection.    
+    """
     words = preprocess(text)
     return Simhash(words).value
 
 
 def hamming_distance(fp1, fp2):
     """ 
-    Given two fingerprints, computes the hamming distance between. 
+    Input:
+        fp1 (int): First 64-bit fingerprint
+        fp2 (int): Second 64-bit fingerprint
+
+    Output:
+        int: Number of differing bits (Hamming distance)
+
+    Description:
+        Computes the number of bit positions at which the two fingerprints differ,
+        a measure of similarity between two content fingerprints.    
     """
     x = (fp1 ^ fp2) & ((1 << 64) - 1)
     distance = 0
@@ -103,9 +181,19 @@ def hamming_distance(fp1, fp2):
 
 def compute_age(lambda_, t):
     """ 
-    Computes the age, given: 
-    -   Lambda: number of times per day the page is changed 
-    -   t: days since the last crawl 
+        Compute age value to decide page freshness.
+
+    Input:
+        lambda_ (float): Expected number of content changes per day
+        t (float): Number of days since last crawl
+
+    Output:
+        float: Computed age metric for freshness decision
+
+    Description:
+        Calculates the age based on the formula considering the
+        change frequency lambda and elapsed time t, used to estimate
+        if a page should be re-fetched.
     """
     if lambda_ == 0:
         return t 
@@ -114,8 +202,17 @@ def compute_age(lambda_, t):
 
 def calculate_page_type(content, url=""):    
     """
-    Classifies the page based on the content and the url, returns one between: 'frequent', 
-    'occasional', 'static', 'default'
+    Input:
+        content (str): Lowercased textual content of the page
+        url (str): URL of the page (optional)
+
+    Output:
+        str: One of 'frequent', 'occasional', 'static', 'default'
+
+    Description:
+        Applies heuristic rules based on URL substrings and keyword
+        occurrences in content to classify the update frequency/type
+        of the page, which affects crawling strategy.
     """
     content = content.lower()
     url = url.lower()
@@ -150,8 +247,14 @@ def calculate_page_type(content, url=""):
 
 def from_gap_encoding(gaps):
     """
-    Given a list of gap-encoded positions, returns the absolute positions. 
-    Ex: [4,3,8] → [4, 7, 15]
+    Input:
+        gaps (List[int]): List of gap-encoded positions (e.g. [4, 3, 8])
+
+    Output:
+        List[int]: List of absolute positions (e.g. [4, 7, 15])
+
+    Description:
+        Decodes a gap-encoded list of word positions to their original absolute positions.
     """
     if not gaps:
         return []
@@ -163,8 +266,15 @@ def from_gap_encoding(gaps):
 
 def to_gap_encoding(positions):
     """
-    Given a list of absolute positions, it returns the gap-encoded positions.
-    Ex: [4, 7, 15] → [4, 3, 8]
+    Input:
+        positions (List[int]): List of absolute positions (e.g. [4, 7, 15])
+
+    Output:
+        List[int]: List of gap-encoded positions (e.g. [4, 3, 8])
+
+    Description:
+        Encodes a list of absolute word positions as gaps between consecutive positions,
+        to save space in the inverted index.
     """
     if not positions:
         return []
@@ -176,8 +286,30 @@ def to_gap_encoding(positions):
 
 class Storage:
 
+    """
+    Class to manage persistence of pages and inverted index with freshness
+    and near-duplicate detection.
+
+    Attributes:
+        pages_file (str): Path to JSON file storing page metadata
+        index_file (str): Path to JSON file storing inverted index
+        pages (dict): In-memory dictionary of page metadata
+        inverted_index (dict): In-memory inverted index {term: {url: {tf, positions}}}
+    """
 
     def __init__(self, pages_file="data/pages.json", index_file="data/inverted_index.json"):
+        """
+        Input:
+            pages_file (str): Filename for storing pages metadata (default "data/pages.json")
+            index_file (str): Filename for storing inverted index (default "data/inverted_index.json")
+
+        Output:
+            None
+
+        Description:
+            Initialize storage, loading pages and index from files or empty.
+        """
+
         self.pages_file = pages_file
         self.index_file = index_file
         # Load data from disk or initialize empty
@@ -186,6 +318,16 @@ class Storage:
 
 
     def _load_json(self, filename):
+        """
+        Input:
+            filename (str): Path to JSON file
+
+        Output:
+            dict or None: Parsed JSON data or None if file doesn't exist
+        
+        Description: 
+            Load JSON data from file.
+        """
         if os.path.exists(filename):
             with open(filename, "r", encoding="utf-8") as f:
                 return json.load(f)
@@ -193,13 +335,39 @@ class Storage:
 
 
     def _save_json(self, filename, data):
+        """
+        Input:
+            filename (str): Path to JSON file
+            data (dict): Data to save
+
+        Output:
+            None
+
+        Description: 
+            Save data as JSON to file.
+        """
         with open(filename, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2)
 
 
-    def save_page(self, url, content, fingerprint):
+    def save_page(self, url, content):
+        """
+        Input:
+            url (str): URL of the page
+            content (str): Text content of the page
+
+        Output:
+            None
+
+        Description:
+            Computes page fingerprint and type, updates last fetch time,
+            and updates inverted index with terms and their positions.
+        """
         now = time.time()
         page_type = calculate_page_type(content, url)
+        fingerprint = compute_fingerprint(content)
+
+        print(f"Saving page: {url}")  # <-- DEBUG
 
         # Save/Update page data
         self.pages[url] = {
@@ -214,9 +382,18 @@ class Storage:
     
     def index_terms(self, url, content):
         """
-        Indexes the terms contained in a web page with a certain url and content. 
-        """
+        Input:
+            url (str): URL of the page
+            content (str): Text content of the page
 
+        Output:
+            None
+
+        Description:
+            Preprocesses content to extract lemmatized words, calculates
+            term frequencies and position lists, gap-encodes positions,
+            and updates the inverted index accordingly.
+        """
         # Ensure the URL is already present in the pages dictionary.
         if url not in self.pages:
             raise ValueError(f"URL {url} not found in pages")
@@ -256,13 +433,16 @@ class Storage:
 
         # Save the updated inverted index to the index file (disk)
         self._save_json(self.index_file, self.inverted_index)
-        
-
-    def get_page(self, url):
-        return self.pages.get(url)
 
 
     def get_page_type(self, url):
+        """
+        Input:
+            url (str): URL of the page
+
+        Output:
+            str or None: Page type string or None if page not found
+        """
         page = self.pages.get(url)
         if page:
             return page.get("page_type")
@@ -270,6 +450,13 @@ class Storage:
 
 
     def get_last_fetch(self, url):
+        """
+        Input:
+            url (str): URL of the page
+
+        Output:
+            float or None: UNIX timestamp of last fetch or None if not found
+        """
         page = self.pages.get(url)
         if page:
             return page.get("last_fetch")
@@ -277,19 +464,28 @@ class Storage:
 
 
     def get_tf(self, term):
+        """
+        Input:
+            term (str): Term to query
+
+        Output:
+            dict: Dictionary {url: {"tf": int, "positions": List[int]}} or empty dict
+        """
         return self.inverted_index.get(term, {})
 
 
     def needs_refresh(self, url):
         """
-        Checks for freshness using age.  
-        States if a page needs to be fetched again by defining lambda dynamically by looking at the "type
-        of page". 
-        In fact, different pages are being updated at different frequency depending on the type of content:
-        a news page is probably updated multiple times per day, while the contacts page of a company is 
-        probably updated once a month. 
-        """
+        Input:
+            url (str): URL of the page
 
+        Output:
+            bool: True if page needs fetching again, False otherwise
+
+        Description:
+            Calculates age of the page using compute_age with
+            lambda frequency based on page type, and compares to threshold.
+        """
         page = self.pages.get(url)
         if not page:
             return True
@@ -311,13 +507,17 @@ class Storage:
 
     def is_near_duplicate(self, content, threshold=5):        
         """
-        Checks whether the content of a web page is a near-duplicate of a web page 
-        in the set. 
-        This is done by computing the fingerprint of the content of the page using the Simhash algorithm
-        and then computing the hamming distance with the fingerprints of the pages contained in the set 
-        pages. 
-        """
+        Input:
+            content (str): Text content of a page
+            threshold (int): Maximum Hamming distance to consider near-duplicate (default 5)
 
+        Output:
+            Tuple[bool, str or None]: (True, url) if near-duplicate found, else (False, None)
+
+        Description:
+            Computes fingerprint of the new content and compares Hamming distance
+            with all stored fingerprints to detect near duplicates. 
+        """
         new_fp = compute_fingerprint(content)
     
         for url, page_data in self.pages.items():
@@ -335,10 +535,28 @@ class Storage:
     
 
     def commit(self):
-        """ Saves the data on the disk """
+        """ 
+        Input:
+            None
+
+        Output:
+            None
+        
+        Description: 
+            Saves the data on the disk 
+        """
         self._save_json(self.pages_file, self.pages)
         self._save_json(self.index_file, self.inverted_index)
 
 
     def close(self):
+        """
+        Alias for commit to save data and close storage.
+
+        Input:
+            None
+
+        Output:
+            None
+        """
         self.commit()
