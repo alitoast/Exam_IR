@@ -110,10 +110,15 @@ class Scheduler:
         async with self.semaphore:
             async with self.host_locks[hostname]:
                 logger.info(f"Fetching {url}")
+                start_time = time.perf_counter()    # want to measure time taken for each request
                 try:
                     response = await self.fetcher.fetch(url)
+                    duration = time.perf_counter() - start_time
+                    logger.info(f"Fetched {url} in {duration:.2f}s")
                     return response
                 except Exception as e:
+                    duration = time.perf_counter() - start_time
+                    logger.error(f"Fetch failed for {url} after {duration:.2f}s: {e}")
                     await self.handle_fetch_failure(url, e)
                     self.task_done()
                     return None
