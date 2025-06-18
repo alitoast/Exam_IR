@@ -17,18 +17,21 @@ import time
 from urllib.parse import urlparse
 from collections import defaultdict
 
+"""
 from fetcher import Fetcher  # Eva
 from parser import Parser    # Eva
 from storage import Storage  # Francesca
+"""
 
+from mock import Fetcher, Parser, Storage
 
 class Scheduler:
-    def __init__(self, max_concurrency=5, num_spiders=5):
-        self.frontier = asyncio.Queue()                         # URLs to crawl
-        self.visited = set()                                    # tracks visited URLs 
-        self.semaphore = asyncio.Semaphore(max_concurrency)     # limits max parallel fetches
-        self.host_locks = defaultdict(asyncio.Lock)             # ensures one fetch per host at a time
-        self.retries = defaultdict(int)                         # dictionary keeps count of how many times retried each URL
+    def __init__(self, max_concurrency, num_spiders):
+        self.frontier = asyncio.Queue() # URLs to crawl
+        self.visited = set()    # tracks visited URLs 
+        self.semaphore = asyncio.Semaphore(max_concurrency) # limits max parallel fetches
+        self.host_locks = defaultdict(asyncio.Lock) # ensures one fetch per host at a time
+        self.retries = defaultdict(int) # dictionary keeps count of how many times retried each URL
 
         self.max_concurrency = max_concurrency
         self.num_spiders = num_spiders
@@ -36,18 +39,6 @@ class Scheduler:
         self.fetcher = Fetcher()
         self.parser = Parser()
         self.storage = Storage()
-
-        """
-        Need to choose what's best either this with fixes cause is synchronous. 
-        Probably best to keeep the method later but
-        needs check cause r equires an async context to call this method. 
-        and needs to be called explicitly from outside after instantiation.
-
-        
-        # populate the frontier
-        for seed in seeds:
-            self.frontier.put_nowait(seed)
-        """
 
     async def add_url(self, url):
         """
@@ -83,7 +74,7 @@ class Scheduler:
         """
         self.frontier.task_done()
          
-    
+       
     async def spider(self):
         """
         Spider that pulls a URL, fetches it, parses it, and queues new links.
@@ -99,7 +90,7 @@ class Scheduler:
                     print(f"[Crawler] Fetching {url}")
 
                     try:
-                    response = await self.fetcher.fetch(url)
+                        response = await self.fetcher.fetch(url)
 
                     except Exception as e:
                         print(f"[Error] Fetch failed for {url}: {e}")
@@ -144,18 +135,21 @@ class Scheduler:
             except Exception as e:
                 print(f"[Error] Failed to parse links from {final_url}: {e}")     
 
-    async def run(self, seeds):
+    async def run(self, seeds=None):
         """
         Starts the crawling loop with multiple concurrent spiders.
         Creates num_spiders number of tasks.
         Each one runs self.worker(fetcher, parser)
         Uses asyncio.create_task() to run them concurrently
         """
+
+        if not seeds:
+            seeds = ["https://example.com"]
+
+
         await self.seed_urls(seeds)
 
-        spiders = [
-            asyncio.create_task(self.spider()) for _ in range(self.num_spiders)
-            ]
+        spiders = [asyncio.create_task(self.spider()) for _ in range(self.num_spiders)]
 
         await self.frontier.join()  # wait for all items in queue to be fully processed
 
@@ -165,3 +159,11 @@ class Scheduler:
         await asyncio.gather(*spiders, return_exceptions=True)
         print(f"[Crawler] Finished. Total pages visited: {len(self.visited)}")
 
+
+if __name__ == "__main__":
+    import asyncio
+
+    scheduler = Scheduler(max_concurrency=3, num_spiders=2)
+
+    # Test with a custom seed
+    asyncio.run(scheduler.run(["https://example.com/start"]))
