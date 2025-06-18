@@ -15,12 +15,12 @@ from collections import defaultdict
 import logging
 
 
-from fetcher import Fetcher  # Eva
-from parser import Parser    # Eva
+from fetcher import Fetcher  
+from parser import Parser    
 """
 from storage import Storage  # Francesca
 """
-
+from mock import Storage
 
 # logging set up
 logging.basicConfig(
@@ -32,10 +32,6 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
-
-
-from mock import Storage
-
 
 class Scheduler:
     def __init__(self, max_concurrency, num_spiders):
@@ -49,8 +45,8 @@ class Scheduler:
         self.max_concurrency = max_concurrency
         self.num_spiders = num_spiders
 
-        self.fetcher = Fetcher
-        self.parser = Parser
+        self.fetcher = Fetcher()
+        self.parser = Parser()
         self.storage = Storage
  
     async def add_url(self, url):
