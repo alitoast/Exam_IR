@@ -288,7 +288,7 @@ def parse_page_url(html,sitemaps_urls,useragent=default_agent):
   return def_urls
 
 
-def parse_page_tags_all(html,tags_type = ['p','article','section','li','h1','h2','h3']):
+def parse_page_tags_all(html,tags_type = None):
 
   '''
     Inputs:
@@ -302,21 +302,28 @@ def parse_page_tags_all(html,tags_type = ['p','article','section','li','h1','h2'
       Parses the given HTML content and extracts text from specified HTML tags.
 
   '''
+  if tags_type == None:
+     tags_type = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div', 'span', 'a']
 
   # Initialize the HTML parser
   soup = BeautifulSoup(html, "html.parser")
 
+  # Find tag to remove
+  for tag in soup(['script','style','footer','nav','noscript','header','form','aside']):
+      tag.decompose()
+
+  # Find all comments and removes them
+  for comment in soup.find_all(string=lambda text: isinstance(text,comment)):
+      comment.extract()
+
   # Find all tags of the specified types (respects DOM order)
-  tags = soup.find_all(tags_type) #dovrebbe rispettare l'ordine del DOM
+  tags = soup.find_all(tags_type) 
 
   # Extract clean text from each tag (removing whitespace and combining with spaces)
   texts = [tag.get_text(separator=' ', strip=True) for tag in tags]
 
   return texts
 
-html = fetch(start_url_due, default_agent)
-words = parse_page_tags_all(html)
-print(words)
-print(default_agent.last_access)
+
 
 
