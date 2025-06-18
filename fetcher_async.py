@@ -129,6 +129,7 @@ class UserAgentPolicy:
      Class to identify user agents and store relevant information to manage their requests appropriately over time
   '''
   def __init__(self, name, base_url, path_disallow, crawl_delay, request_rate,last_access, header, visited):
+        self.lock = asyncio.Lock()
         self.base_url = base_url
         self.name = name
         self.path_disallow = path_disallow
@@ -235,38 +236,36 @@ async def check_time(useragent=default_agent):
         - Ensures the delay is respected by pausing execution as needed.
         - Updates `last_access` to the current time after waiting.
   '''
+  # To avoid simultaneous tasks between same useragents
+  async with useragent.lock:  
+    # If both crawl_delay and request_rate are defined, use the more restrictive one (converted to nanoseconds)
+    if useragent.request_rate and useragent.crawl_delay:
+         # Calculate delay from request rate: total interval (in ns) divided by number of requests
+        request_delay = (useragent.request_rate[1] * 1e9) / useragent.request_rate[0]
+        # Convert crawl delay from seconds to nanoseconds
+        crawl_delay = useragent.crawl_delay * 1e9
+        # Use the larger (i.e., more restrictive) delay
+         delay = max(request_delay, crawl_delay)
 
+    elif useragent.crawl_delay:
+         delay = useragent.crawl_delay * 1e9
 
-  # If both crawl_delay and request_rate are defined, use the more restrictive one (converted to nanoseconds)
+    elif useragent.request_rate:
+         delay = (useragent.request_rate[1] * 1e9) / useragent.request_rate[0]
 
-  if useragent.request_rate and useragent.crawl_delay:
-     # Calculate delay from request rate: total interval (in ns) divided by number of requests
-     request_delay = (useragent.request_rate[1] * 1e9) / useragent.request_rate[0]
-     # Convert crawl delay from seconds to nanoseconds
-     crawl_delay = useragent.crawl_delay * 1e9
-     # Use the larger (i.e., more restrictive) delay
-     delay = max(request_delay, crawl_delay)
+    # If neither crawl_delay and request rate are defined, use a default delay of 1.5 seconds
+    else:
+        delay = 1.5 * 1e9  # 1.5 secondi in nanosecondi
 
-  elif useragent.crawl_delay:
-     delay = useragent.crawl_delay * 1e9
+    # Get the current time in nanoseconds
+    now = time.monotonic_ns()
+    wait = max(0, (useragent.last_access + delay) - now)
 
-  elif useragent.request_rate:
-     delay = (useragent.request_rate[1] * 1e9) / useragent.request_rate[0]
+    if wait > 0:
+         await asyncio.sleep(wait / 1e9)
 
-  # If neither crawl_delay and request rate are defined, use a default delay of 1.5 seconds
-  else:
-    delay = 1.5 * 1e9  # 1.5 secondi in nanosecondi
-
-  # Get the current time in nanoseconds
-  now = time.monotonic_ns()
-  wait = max(0, (useragent.last_access + delay) - now)
-
-  if wait > 0:
-     await asyncio.sleep(wait / 1e9)
-
-  # Update last_access to the current time to enforce timing on next request
-  useragent.last_access = time.monotonic_ns()
-
+    # Update last_access to the current time to enforce timing on next request
+    useragent.last_access = time.monotonic_ns()
 
 async def fetch(url, useragent=default_agent):
     '''
