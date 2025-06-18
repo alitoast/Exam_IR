@@ -185,5 +185,6 @@ class Scheduler:
             s.cancel()  # cancel all spiders after done so it doesn't run forever
 
         await asyncio.gather(*spiders, return_exceptions=True)
-        logger.info(f"Crawling finished. Total seen URLs: {len(self.seen)}")
+        logger.info("Crawling finished.")
+        logger.info(f"Total seen URLs: {len(self.seen)}")
         logger.info(f"Total successfully visited URLs: {len(self.visited)}")
