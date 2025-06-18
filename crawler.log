@@ -1,85 +1,110 @@
-11:45:31 [INFO] Fetching https://example.com
-11:45:31 [INFO] Saved https://example.com
-11:45:31 [INFO] Fetching https://example.com/fail
-11:45:31 [ERROR] Fetch failed for https://example.com/fail: Simulated fetch failure
-11:45:31 [INFO] Re-queuing https://example.com/fail (attempt 1)
-11:45:31 [WARNING] Empty response for https://example.com/fail
-11:45:31 [INFO] Fetching https://example.com/child
-11:45:31 [INFO] Saved https://example.com/child
-11:45:31 [INFO] Fetching https://example.com/fail
-11:45:31 [ERROR] Fetch failed for https://example.com/fail: Simulated fetch failure
-11:45:31 [INFO] Re-queuing https://example.com/fail (attempt 2)
-11:45:31 [WARNING] Empty response for https://example.com/fail
-11:45:31 [INFO] Fetching https://example.com/child/child
-11:45:31 [INFO] Finished. Total pages visited: 4
-11:47:39 [INFO] Fetching https://example.com
-11:47:39 [INFO] Saved https://example.com
-11:47:39 [INFO] Fetching https://example.com/fail
-11:47:39 [ERROR] Fetch failed for https://example.com/fail: Simulated fetch failure
-11:47:39 [INFO] Re-queuing https://example.com/fail (attempt 1)
-11:47:39 [WARNING] Empty response for https://example.com/fail
-11:47:39 [INFO] Fetching https://example.com/child
-11:47:40 [INFO] Saved https://example.com/child
-11:47:40 [INFO] Fetching https://example.com/fail
-11:47:40 [ERROR] Fetch failed for https://example.com/fail: Simulated fetch failure
-11:47:40 [INFO] Re-queuing https://example.com/fail (attempt 2)
-11:47:40 [WARNING] Empty response for https://example.com/fail
-11:47:40 [INFO] Fetching https://example.com/child/child
-11:47:40 [INFO] Finished. Total pages visited: 4
-11:48:46 [INFO] Fetching https://example.com
-11:48:46 [INFO] Saved https://example.com
-11:48:46 [INFO] Fetching https://example.com/fail
-11:48:46 [ERROR] Fetch failed for https://example.com/fail: Simulated fetch failure
-11:48:46 [INFO] Re-queuing https://example.com/fail (attempt 1)
-11:48:46 [WARNING] Empty response for https://example.com/fail
-11:48:46 [INFO] Fetching https://example.com/child
-11:48:47 [INFO] Saved https://example.com/child
-11:48:47 [INFO] Fetching https://example.com/fail
-11:48:47 [ERROR] Fetch failed for https://example.com/fail: Simulated fetch failure
-11:48:47 [INFO] Re-queuing https://example.com/fail (attempt 2)
-11:48:47 [WARNING] Empty response for https://example.com/fail
-11:48:47 [INFO] Fetching https://example.com/child/child
-11:48:47 [INFO] Finished. Total pages visited: 4
-11:49:34 [INFO] Fetching https://example.com
-11:49:34 [INFO] Saved https://example.com
-11:49:34 [INFO] Fetching https://example.com/fail
-11:49:34 [ERROR] Fetch failed for https://example.com/fail: Simulated fetch failure
-11:49:34 [INFO] Re-queuing https://example.com/fail (attempt 1)
-11:49:34 [WARNING] Empty response for https://example.com/fail
-11:49:34 [INFO] Fetching https://example.com/child
-11:49:34 [INFO] Saved https://example.com/child
-11:49:34 [INFO] Fetching https://example.com/fail
-11:49:34 [ERROR] Fetch failed for https://example.com/fail: Simulated fetch failure
-11:49:34 [INFO] Re-queuing https://example.com/fail (attempt 2)
-11:49:34 [WARNING] Empty response for https://example.com/fail
-11:49:34 [INFO] Fetching https://example.com/child/child
-11:49:34 [INFO] Finished. Total pages visited: 4
-11:56:40 [INFO] Fetching https://example.com
-11:56:41 [INFO] Saved https://example.com
-11:56:41 [INFO] Fetching https://example.com/fail
-11:56:41 [ERROR] Fetch failed for https://example.com/fail: Simulated fetch failure
-11:56:41 [INFO] Re-queuing https://example.com/fail (attempt 1)
-11:56:41 [WARNING] Empty response for https://example.com/fail
-11:56:41 [INFO] Fetching https://example.com/child
-11:56:41 [INFO] Saved https://example.com/child
-11:56:41 [INFO] Fetching https://example.com/fail
-11:56:41 [ERROR] Fetch failed for https://example.com/fail: Simulated fetch failure
-11:56:41 [INFO] Re-queuing https://example.com/fail (attempt 2)
-11:56:41 [WARNING] Empty response for https://example.com/fail
-11:56:41 [INFO] Fetching https://example.com/child/child
-11:56:41 [INFO] Finished. Total pages visited: 4
-12:11:17 [INFO] Fetching https://example.com
-12:11:17 [INFO] Saved https://example.com
-12:11:17 [INFO] Fetching https://example.com/fail
-12:11:17 [ERROR] Fetch failed for https://example.com/fail: Simulated fetch failure
-12:11:17 [INFO] Re-queuing https://example.com/fail (attempt 1)
-12:11:17 [WARNING] Empty response for https://example.com/fail
-12:11:17 [INFO] Fetching https://example.com/child
-12:11:17 [INFO] Saved https://example.com/child
-12:11:17 [INFO] Fetching https://example.com/fail
-12:11:17 [ERROR] Fetch failed for https://example.com/fail: Simulated fetch failure
-12:11:17 [INFO] Re-queuing https://example.com/fail (attempt 2)
-12:11:17 [WARNING] Empty response for https://example.com/fail
-12:11:17 [INFO] Fetching https://example.com/child/child
-12:11:17 [INFO] Crawling finished. Total seen URLs: 4
-12:11:17 [INFO] Total successfully visited URLs: 2
+21:06:29 [INFO] Fetching https://example.com
+21:06:29 [INFO] Fetching https://news.ycombinator.com
+21:06:30 [INFO] Fetched https://example.com (Status 200)
+21:06:30 [INFO] Fetched https://example.com in 0.67s
+21:06:30 [ERROR] Failed to save https://example.com: 
+**********************************************************************
+  Resource [93mpunkt_tab[0m not found.
+  Please use the NLTK Downloader to obtain the resource:
+
+  [31m>>> import nltk
+  >>> nltk.download('punkt_tab')
+  [0m
+  For more information see: https://www.nltk.org/data.html
+
+  Attempted to load [93mtokenizers/punkt_tab/english/[0m
+
+  Searched in:
+    - '/home/toast/nltk_data'
+    - '/home/toast/miniconda3/envs/inf_retr/nltk_data'
+    - '/home/toast/miniconda3/envs/inf_retr/share/nltk_data'
+    - '/home/toast/miniconda3/envs/inf_retr/lib/nltk_data'
+    - '/usr/share/nltk_data'
+    - '/usr/local/share/nltk_data'
+    - '/usr/lib/nltk_data'
+    - '/usr/local/lib/nltk_data'
+**********************************************************************
+
+21:06:32 [INFO] Fetched https://news.ycombinator.com (Status 200)
+21:06:32 [INFO] Fetched https://news.ycombinator.com in 2.44s
+21:06:32 [ERROR] Failed to save https://news.ycombinator.com: 
+**********************************************************************
+  Resource [93mpunkt_tab[0m not found.
+  Please use the NLTK Downloader to obtain the resource:
+
+  [31m>>> import nltk
+  >>> nltk.download('punkt_tab')
+  [0m
+  For more information see: https://www.nltk.org/data.html
+
+  Attempted to load [93mtokenizers/punkt_tab/english/[0m
+
+  Searched in:
+    - '/home/toast/nltk_data'
+    - '/home/toast/miniconda3/envs/inf_retr/nltk_data'
+    - '/home/toast/miniconda3/envs/inf_retr/share/nltk_data'
+    - '/home/toast/miniconda3/envs/inf_retr/lib/nltk_data'
+    - '/usr/share/nltk_data'
+    - '/usr/local/share/nltk_data'
+    - '/usr/lib/nltk_data'
+    - '/usr/local/lib/nltk_data'
+**********************************************************************
+
+21:06:32 [INFO] Crawling finished.
+21:06:32 [INFO] Total seen URLs: 2
+21:06:32 [INFO] Total successfully visited URLs: 0
+21:13:28 [INFO] Fetching https://example.com
+21:13:28 [INFO] Fetching https://news.ycombinator.com
+21:13:29 [INFO] Fetched https://example.com (Status 200)
+21:13:29 [INFO] Fetched https://example.com in 0.78s
+21:13:29 [ERROR] Failed to save https://example.com: 
+**********************************************************************
+  Resource [93maveraged_perceptron_tagger_eng[0m not found.
+  Please use the NLTK Downloader to obtain the resource:
+
+  [31m>>> import nltk
+  >>> nltk.download('averaged_perceptron_tagger_eng')
+  [0m
+  For more information see: https://www.nltk.org/data.html
+
+  Attempted to load [93mtaggers/averaged_perceptron_tagger_eng/[0m
+
+  Searched in:
+    - '/home/toast/nltk_data'
+    - '/home/toast/miniconda3/envs/inf_retr/nltk_data'
+    - '/home/toast/miniconda3/envs/inf_retr/share/nltk_data'
+    - '/home/toast/miniconda3/envs/inf_retr/lib/nltk_data'
+    - '/usr/share/nltk_data'
+    - '/usr/local/share/nltk_data'
+    - '/usr/lib/nltk_data'
+    - '/usr/local/lib/nltk_data'
+**********************************************************************
+
+21:13:31 [INFO] Fetched https://news.ycombinator.com (Status 200)
+21:13:31 [INFO] Fetched https://news.ycombinator.com in 2.73s
+21:13:31 [ERROR] Failed to save https://news.ycombinator.com: 
+**********************************************************************
+  Resource [93maveraged_perceptron_tagger_eng[0m not found.
+  Please use the NLTK Downloader to obtain the resource:
+
+  [31m>>> import nltk
+  >>> nltk.download('averaged_perceptron_tagger_eng')
+  [0m
+  For more information see: https://www.nltk.org/data.html
+
+  Attempted to load [93mtaggers/averaged_perceptron_tagger_eng/[0m
+
+  Searched in:
+    - '/home/toast/nltk_data'
+    - '/home/toast/miniconda3/envs/inf_retr/nltk_data'
+    - '/home/toast/miniconda3/envs/inf_retr/share/nltk_data'
+    - '/home/toast/miniconda3/envs/inf_retr/lib/nltk_data'
+    - '/usr/share/nltk_data'
+    - '/usr/local/share/nltk_data'
+    - '/usr/lib/nltk_data'
+    - '/usr/local/lib/nltk_data'
+**********************************************************************
+
+21:13:31 [INFO] Crawling finished.
+21:13:31 [INFO] Total seen URLs: 2
+21:13:31 [INFO] Total successfully visited URLs: 0
