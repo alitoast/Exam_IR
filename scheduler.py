@@ -39,6 +39,7 @@ from mock import Fetcher, Parser, Storage
 class Scheduler:
     def __init__(self, max_concurrency, num_spiders):
         self.frontier = asyncio.Queue() # URLs to crawl
+        self.seen = set()   # tracks seen URLs
         self.visited = set()    # tracks visited URLs 
         self.semaphore = asyncio.Semaphore(max_concurrency) # limits max parallel fetches
         self.host_locks = defaultdict(asyncio.Lock) # ensures one fetch per host at a time
@@ -53,11 +54,11 @@ class Scheduler:
 
     async def add_url(self, url):
         """
-        Add a new URL to the frontier if it hasn't been visited.
+        Add a new URL to the frontier if it hasn't been seen.
         """
-        if url not in self.visited:
-            await self.frontier.put(url)
-            self.visited.add(url)
+        if url not in self.seen:
+            self.seen.add(url)
+            await self.frontier.put(url) 
 
     async def seed_urls(self, urls):
         """
@@ -142,6 +143,9 @@ class Scheduler:
         except Exception as e:
             logger.error(f"Failed to save {final_url}: {e}")
             return
+        
+        # mark as successfully visited only after processing
+        self.visited.add(final_url) 
 
         try:
             # Extract and enqueue links found in the page
@@ -181,4 +185,5 @@ class Scheduler:
             s.cancel()  # cancel all spiders after done so it doesn't run forever
 
         await asyncio.gather(*spiders, return_exceptions=True)
-        logger.info(f"Finished. Total pages visited: {len(self.visited)}")
+        logger.info(f"Crawling finished. Total seen URLs: {len(self.seen)}")
+        logger.info(f"Total successfully visited URLs: {len(self.visited)}")
