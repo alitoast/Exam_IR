@@ -58,12 +58,13 @@ pip install rfc3986
 import pandas as pd
 import re
 from urllib.parse import urlparse
-import urllib.robotparser #per gestire il file robot.txt
-import xml.etree.ElementTree as ET  #per gestire i file xml
-import requests #per http
-import time #per gestire il tempo
-from bs4 import BeautifulSoup #per gestire il parsing del html (si può usare anche per xml)
-import rfc3986 # per la normalizzazione degli urls
+import urllib.robotparser # to analyse the robot.txt
+import xml.etree.ElementTree as ET  # to modify xml file 
+import requests # http GET management
+import time # time management
+from bs4 import BeautifulSoup # parsing method
+import rfc3986 # to normalize urls
+import logging 
 
 
 #url di prova
@@ -107,9 +108,14 @@ class UserAgentPolicy:
         self.last_access = last_access
         self.header = header
 
+# Setup logging configuration
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%H:%M:%S'
+)
 
-
-
+logger = logging.getLogger(__name__)
 
 
 def check_robots(url,useragent=default_agent):
@@ -144,9 +150,9 @@ def check_robots(url,useragent=default_agent):
   rfl.read()
   check = rfl.can_fetch(useragent,new_url)
   if check:
-    print("{} il sito puo effettuare il fetch dei dati".format(check))
+    logger.info("The useragent can fetch the link.")
   else:
-    print("il sito non puo effettuare il fetch dei dati")
+    logger.warning("Impossible to fetch %s", new_url)
 
   # Retrieve the list of the path not to follow
   path_disallow = rfl.parse("Disallow")
@@ -162,8 +168,7 @@ def check_robots(url,useragent=default_agent):
 
   # Retrieve any sitemap URLs declared in the robots.txt
   sitemap = rfl.site_maps()
-  print("sitemap: {}".format(sitemap))
-
+  
   return sitemap
 
 
@@ -251,20 +256,20 @@ def fetch(url,useragent=default_agent):
     try:
        response = requests.get(url, headers=headers, timeout=10)
        if response.status_code == 200:
-         print("Pagina recuperata con successo:{}".format(url))
+         logging.info("Page successfully recovered")
          html = response.text
          visulized_url.add(url)
          return html
        else:
-        print("Errore nella ricezione del sito:{}".format(url))
+          loggin.warning("Page not available")
         return None
 
     # Handle any request-related exceptions (connection errors, timeouts, etc.)
     except requests.RequestException as e:
-          print("Eccezione durante la richiesta:", e)
+          logger.error("Error, impossible to fetch %s: %s", url, e)
           return None
   else:
-    print("Pagina già visulizzata:{}".format(url))
+    logging.warning("Page visited alredy")
     return None
 
 
@@ -277,8 +282,8 @@ if __name__ == "__main__":
         for sm_url in sitemap:
             html = fetch(sm_url, useragent=default_agent)
             if html:
-               print("Sitemap successul retrieved")
+               logging.info("Sitemap successul retrieved")
     else:
         html = fetch(test_url, useragent=default_agent)
         if html:
-            print("Fetched content:{}".format(html))
+            logging.info("Fetched content"))
