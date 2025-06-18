@@ -162,7 +162,7 @@ def check_robots(url,useragent=default_agent):
   rfl.set_url(new_url)
   # Read and parse the robots.txt file
   rfl.read()
-  check = rfl.can_fetch(useragent,new_url)
+  check = rfl.can_fetch(useragent.name,new_url)
   if check:
     logger.info("The useragent can fetch the link.")
   else:
