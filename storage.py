@@ -1,343 +1,315 @@
-"""
-SQLite is a C library that provides a lightweight disk-based database that doesn’t require 
-a separate server process and allows accessing the database using a nonstandard variant of the 
-SQL query language. It is imported and used it to save and manage data. 
-Time is necessary to manage time. lol
-Nltk (Naturale Language Toolkit) is a suite of libraries and programs for symbolic and 
-statistical natural language processing (NLP) for English. From this suite, several functions were
-imported.   
-"""
-import sqlite3                      #   library to import      
-import time 
-import nltk                         #   library to import 
-import numpy as np
-from nltk.corpus import stopwords 
+#   Libraries to import 
+import json
+import time
+import os
+import numpy as np 
+import nltk 
+from collections import Counter
+from simhash import Simhash 
+from nltk import pos_tag, word_tokenize
+from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
-from nltk import pos_tag, word_tokenize 
 from nltk.corpus.reader.wordnet import NOUN, VERB, ADJ, ADV
 
-"""
-From the simhash library I import the Simhash object to apply the algorithm.
-From the collections library I import the Counter object. 
-"""
-from simhash import Simhash         #   library to import 
-from collections import Counter     #   library to import 
-
-
-#   Functions imported from other modules 
+#   Functions imported from other modules of the project
 from fetcher import fetch 
 from parser import parse_page_tags_all 
-
 
 #   Download necessary NLTK resources 
 nltk.download('stopwords')
 nltk.download('wordnet') 
 nltk.download('punkt')
-nltk.download('averaged_perceptron_tagger_eng')  
+nltk.download('averaged_perceptron_tagger')  
 nltk.download('omw-1.4')
 
 
-
-LAMBDA_BY_TYPE = {
-    "frequent": 2.0, 
-    "occasional": 1.0,
-    "static": 0.05,
-    "default": 0.5 
-}
-
-
 #   Function to map POS tags from Treebank to Wordnet    
+def get_wordnet_pos(tag):
+    if tag.startswith('J'): return ADJ
+    if tag.startswith('V'): return VERB
+    if tag.startswith('N'): return NOUN
+    if tag.startswith('R'): return ADV
+    return NOUN
 
-def get_wordnet_pos(treebank_tag): 
-
-    if treebank_tag.startswith('J'):
-        return ADJ
-
-    elif treebank_tag.startswith('V'):
-        return VERB
-
-    elif treebank_tag.startswith('N'):
-        return NOUN
-
-    elif treebank_tag.startswith('R'):
-        return ADV
-
-    else:
-        return NOUN  # default
-
-
-#   Given the url, it returns the content of the page as a string.
-
-def content_page(url): 
-
-    html = fetch(url)
-    text_from_page = parse_page_tags_all(html)
-    content_page = ' '.join(text_from_page)
-
-    return content_page 
-    
 
 #   Function to preprocess the content of a page before indexing the terms contained in it 
-
-def preprocess(text): 
-
-    words = word_tokenize(text.lower())
-    
-    #   Set of stopwords 
-    stop_words = set(stopwords.words('english')) 
-    
-    #   Lemmatizer 
+def preprocess(text):
+    stop_words = set(stopwords.words("english"))
     lemmatizer = WordNetLemmatizer()
-
     #   These words are not in the stop words set, but I do not want them in the index, so they 
     #   will be removed 
     number_words = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten']
-
+    words = word_tokenize(text.lower())
     #   Remove stop words, number_words and punctuation 
     words = [w for w in words if w.isalpha() and w not in stop_words and w not in number_words]
+    #   Each words is coupled with their tag 
+    tagged_words = pos_tag(words)    
+    #   Lemmatization is done using the right grammatical type and then the words are returned 
+    return [lemmatizer.lemmatize(w, get_wordnet_pos(t)) for w, t in tagged_words]
 
-    #   Each words is coupled with 
-    tagged_words = pos_tag(words)
 
-    #   Lemmatization is done using the correct grammatical type 
-    lemmatized_words = [lemmatizer.lemmatize(w, get_wordnet_pos(t)) for w, t in tagged_words]
-
-    return lemmatized_words
+#   Given the url, it returns the content of the page as a string.
+def content_page(url): 
+    html = fetch(url)
+    text_from_page = parse_page_tags_all(html)
+    content_page = ' '.join(text_from_page)
+    return content_page 
 
 
 #   Given the text, this function computes its Simhash fingerprint 
-
 def compute_fingerprint(text):
-    
     words = preprocess(text)
     return Simhash(words).value
 
 
 #   Given two fingerprint, this function computes the hamming distance between them.
 #   It will be used to check if two texts are near-duplicates or not 
-
 def hamming_distance(fp1, fp2):
-
     x = (fp1 ^ fp2) & ((1 << 64) - 1)
     distance = 0
     while x:
         distance += 1
         x &= x - 1
-
     return distance
 
 
-#   Function that computes the age, given: 
-#   -   Lambda: number of times per day the page is changed 
-#   -   t: days since the last crawl 
+#   Lambda mapping for different page types 
+LAMBDA_BY_TYPE = {
+    "frequent": 2.0,
+    "occasional": 1.0,
+    "static": 0.05,
+    "default": 0.5
+}
 
-def compute_age(lambda_, t): 
-
+""" 
+Function that computes the age, given: 
+-   Lambda: number of times per day the page is changed 
+-   t: days since the last crawl 
+"""
+def compute_age(lambda_, t):
+    if lambda_ == 0:
+        return t 
     return (t+lambda_*np.exp(-lambda_*t)-1)/lambda_
 
 
-#   Function that etermines the type of the page based on its content keywords
+"""
+Function that classifies the page based on the content and the url.
+It returns one between: 'frequent', 'occasional', 'static', 'default'
+"""
 
-def calculate_page_type(content):
+def calculate_page_type(content, url=""):
 
-    content = content.lower() 
+    content = content.lower()
+    url = url.lower()
 
-    frequent_keywords = ["breaking news", "live updates", "report", "news"]         #   lambda = 2 
-    occasional_keywords = ["calendar", "workshop", "conference", "event"]           #   lambda = 1
-    static_keywords = ["contacts", "about us", "company info", "privacy policy"]    #   lambda = 0.05 
+    # Special handling for news sites
+    if "guardian" in url or "cnn.com" in url or "bbc.com" in url:
+        if "live" in content and "update" in content:
+            return "frequent"
 
-    #   for default I use lambda = 0.5 
-
-    is_frequent = any(word in content for word in frequent_keywords)
-    is_occasional = any(word in content for word in occasional_keywords)
-    is_static = any(word in content for word in static_keywords)
-
-    if is_frequent: 
-        return "frequent"
-    elif is_occasional: 
-        return "occasional"
-    elif is_static:
+    #   URL-based rules 
+    if "wikipedia.org/wiki/" in url:
         return "static"
-    else:
-        return "default" 
+    if "live" in url or "breaking" in url:
+        return "frequent"
+    if any(k in url for k in ["calendar", "event", "workshop", "conference"]):
+        return "occasional"
+    if any(k in url for k in ["about", "privacy", "contact", "terms"]):
+        return "static"
+
+    # Content-based keyword count 
+    frequent_keywords = ["breaking news", "live updates", "as it happens", "developing story"]
+    occasional_keywords = ["calendar", "workshop", "conference", "event", "seminar"]
+    static_keywords = ["contact us", "about us", "privacy policy", "company info", "terms of service"]
+
+    freq_count = sum(kw in content for kw in frequent_keywords)
+    occas_count = sum(kw in content for kw in occasional_keywords)
+    static_count = sum(kw in content for kw in static_keywords)
+
+    if freq_count >= 2:
+        return "frequent"
+    if occas_count >= 1:
+        return "occasional"
+    if static_count >= 1:
+        return "static"
+
+    return "default"
+
+
+"""
+Given a list of gap-encoded positions, it returns the absolute positions. 
+Ex: [4,3,8] → [4, 7, 15]
+"""
+def from_gap_encoding(gaps):
+    if not gaps:
+        return []
+    positions = [gaps[0]]
+    for gap in gaps[1:]:
+        positions.append(positions[-1] + gap)
+    return positions
 
 
 
-#   Class that manages the SQLite storage, including pages and inverted index
+#   Class to manage the data 
 
+class Storage:
 
-class Storage : 
+    def __init__(self, pages_file="data/pages.json", index_file="data/inverted_index.json"):
+        self.pages_file = pages_file
+        self.index_file = index_file
 
-    def __init__(self, db_path="/data/storage.db"):
-        self.conn = sqlite3.connect(db_path)
-        self._create_tables() 
+        # Load data from disk or initialize empty
+        self.pages = self._load_json(self.pages_file) or {}
+        self.inverted_index = self._load_json(self.index_file) or {}
 
-    """
-    Function to create the two tables we need: pages and inverted_index
-    -   pages:
-        -   id: si autoincrementa 
-        -   url: url of the page 
-        -   html: content of the page in html (maybe I can eliminate it)
-        -   content: only the text of the page, so the html content is "filtered" 
-        -   fingerprint: hashed representation of the content of the page 
-        -   last_fetch: date in which the document was last fetched 
-    -   inverted_index:
-        -   term: word extracted from the context of a web page
-        -   url: url of the page (obvious)
-    """
+    def _load_json(self, filename):
+        if os.path.exists(filename):
+            with open(filename, "r", encoding="utf-8") as f:
+                return json.load(f)
+        return None
 
-    def _create_tables(self): 
-        
-        self.conn.execute('''
-        CREATE TABLE IF NOT EXISTS pages(
-            id INTEGER PRIMARY KEY AUTOINCREMENT, 
-            url TEXT,
-            content TEXT, 
-            fingerprint INTEGER,
-            page_type TEXT, 
-            last_fetch TIMESTAMP 
-        )
-        ''')
+    def _save_json(self, filename, data):
+        with open(filename, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=2)
 
-        self.conn.execute('''
-        CREATE TABLE IF NOT EXISTS inverted_index(
-            term TEXT, 
-            page_id TEXT, 
-            tf INTEGER,
-            PRIMARY KEY (term, page_id), 
-            FOREIGN KEY (page_id) REFERENCES pages(id) ON DELETE CASCADE
-        )
-        ''')
+    def save_page(self, url, content, fingerprint):
+        now = time.time()
+        page_type = calculate_page_type(content, url)
 
-        self.conn.commit()
+        # Save/Update page data
+        self.pages[url] = {
+            "fingerprint": fingerprint,
+            "page_type": page_type,
+            "last_fetch": now 
+        }
+        self._save_json(self.pages_file, self.pages)
+
+        # Update index terms automatically
+        self.index_terms(url, content)
+
     
-    
-    #   Save or update a page on the database 
-    def save_page(self, url, content, fingerprint):    
-        
-        now = time.time() 
-        type = calculate_page_type(content) 
+    # Function to index the terms contained in a web page. 
+    def index_terms(self, url, content):
+        # Ensure the URL is already present in the pages dictionary.
+        if url not in self.pages:
+            raise ValueError(f"URL {url} not found in pages")
 
-        self.conn.execute('''
-        INSERT OR REPLACE INTO pages (url, content, fingerprint, page_type, last_fetch)
-        VALUES(?, ?, ?, ?)
-        ''', (url, content, fingerprint, type, now))
-        
-        self.conn.commit() 
-
-
-    #   Retrieve the type of the page with a given url 
-    def get_page_type(self, url): 
-
-        cursor = self.conn.cursor() 
-        cursor.execute('SELECT page_type FROM pages WHERE url = ?', (url,))
-        result = cursor.fetchone() 
-        return result[0] if result else None
-
-
-    #   Retrieve the time where a page with a given url was last fetched 
-    def get_last_fetch(self, url): 
-
-        cursor = self.conn.cursor() 
-        cursor.execute('SELECT last_fetch FROM pages WHERE url = ?', (url,))
-        result = cursor.fetchone() 
-        return result[0] if result else None
-
-
-    #   Retrieve the fingerprint of a page with a given url     
-    def get_fingerprint(self, url): 
-
-        cursor = self.conn.cursor() 
-        
-        cursor.execute('''
-        SELECT fingerprint FROM pages WHERE url =?
-        ''', (url,))
-
-        result = cursor.fetchone()
-        return result[0] if result else None 
-
-
-    #   Given an url, which was saved in the table pages, index_terms extract the important terms
-    #   that are present in the document, it calculates tf and it adds them in the inverted index.
-
-    def index_terms(self, url): 
-        cursor = self.conn.cursor()
-        cursor.execute('SELECT id, content FROM pages WHERE url=?', (url,))
-        result = cursor.fetchone() 
-        if not result:
-            raise ValueError(f"URL {url} non trovato in pages")
-        page_id, content = result
-
-        #   Preprocess the content of the page 
+        # Preprocess the content to extract clean, lemmatized words
         words = preprocess(content)
 
-        #   Count how many times the word 
-        tf = Counter(words) 
+        tf = Counter()  # Term-frequency of the words 
+        positions = {}  # Dictionary to store word positions in the document
 
-        # Clean the old terms (is it necessary?)
-        cursor.execute('DELETE FROM inverted_index WHERE page_id = ?', (page_id,))
-    
-        for term, freq in tf.items():
-            cursor.execute('''
-                INSERT OR REPLACE INTO inverted_index (term, page_id, tf)
-                VALUES (?, ?, ?)
-            ''', (term, page_id, freq))
+        # Iterate through all words to build term frequencies and positions.
+        for i, word in enumerate(words):
+            tf[word] += 1
+            positions.setdefault(word, []).append(i)
 
-        self.conn.commit()
+        # Perform position gap encoding:
+        # For each word, store the list of position *gaps* instead of absolute positions
+        for word in positions:
+            pos_list = positions[word]
+            if len(pos_list) > 1:
+                # Convert absolute positions to gap-encoded positions for compression
+                gaps = [pos_list[0]] + [pos_list[i] - pos_list[i-1] for i in range(1, len(pos_list))]
+                positions[word] = gaps  # update with gaps
+            else:
+                # If the word appears only once, keep the position as is
+                positions[word] = pos_list  
 
+        # Remove existing entries in the inverted index for this URL
+        # This avoids duplicating or mixing old and new data
+        for term in list(self.inverted_index.keys()):
+            if url in self.inverted_index[term]:
+                del self.inverted_index[term][url]
+                if not self.inverted_index[term]:
+                    del self.inverted_index[term]
 
-    #   It checks whether a content is the near-duplicate of a content saved in the pages table
-    def is_near_duplicate(self, content, threshold=5):
+        # Add the new term frequency and position data into the inverted index
+        for term in tf:
+            if term not in self.inverted_index:
+                self.inverted_index[term] = {}
+            self.inverted_index[term][url] = {
+                "tf": tf[term],
+                "positions": positions[term]
+            }
+
+        # Save the updated inverted index to the index file (disk)
+        self._save_json(self.index_file, self.inverted_index)
         
-        new_fp = compute_fingerprint(content) 
-        cursor = self.conn.cursor() 
-        cursor.execute('SELECT url, fingerprint FROM pages WHERE fingerprint IS NOT NULL')
-        rows = cursor.fetchall()
 
-        for url, fp in rows:
-            try: 
-                #   Calculation of the Hamming distance between the fingerprints, in order 
-                #   to check if they are near duplicates 
-                d = hamming_distance(new_fp, fp)
-                if d <= threshold :
-                    return True     #   The pages are near-duplicates, we can also return the url if we want
-            except ValueError:
-                continue    #   These two pages are not near-duplicates, the algorithm can proceed with 
-                            #   the next one 
+    def get_page(self, url):
         
-        return False    #   This page is not a near-duplicate of any of the pages saved in the db 
-    
+        return self.pages.get(url)
+
+
+    def get_page_type(self, url):
+        page = self.pages.get(url)
+        if page:
+            return page.get("page_type")
+        return None
+
+
+    def get_last_fetch(self, url):
+        page = self.pages.get(url)
+        if page:
+            return page.get("last_fetch")
+        return None
+
+
+    def get_tf(self, term):
+        return self.inverted_index.get(term, {})
+
 
     """
     Check for freshness: I used age for determining the freshness or not of a page. 
-
     This function will state if a page needs to be fetched again by defining lambda dynamically by 
     looking at the "type of page". 
     In fact, different pages are being updated at different frequency depending on the type of content:
     a news page is probably updated multiple times per day, while the contacts page of a company is 
     probably updated once a month. 
-    
     """
-    def needs_refresh(self, url):   
-        last_fetch = self.get_last_fetch(url)
-        
-        if last_fetch is None: 
+
+    def needs_refresh(self, url):
+        page = self.pages.get(url)
+        if not page:
             return True
 
-        page_type = self.get_page_type(url)
-        now = time.time() 
+        last_fetch = page.get("last_fetch")
+        if last_fetch is None:
+            return True
 
-        time_in_days = (now - last_fetch)/86400 
+        page_type = page.get("page_type", "default")
 
-        lambda_ = LAMBDA_BY_TYPE.get(page_type)
-
+        now = time.time()
+        time_in_days = (now - last_fetch) / 86400
+        lambda_ = LAMBDA_BY_TYPE.get(page_type, 0.5)
         threshold = 1 / lambda_
 
         age = compute_age(lambda_, time_in_days)
+        return age > threshold
+    
 
-        return age > threshold 
+    """
+    This functions checks whether the content of a web page is a near-duplicate of a web page 
+    in the set. 
+    This is done by computing the fingerprint of the content of the page using the Simhash algorithm
+    and then computing the hamming distance with the fingerprints of the pages contained in the set 
+    pages. 
+    """
 
-
-    #   Close the database connection    
-    def close(self):
-        self.conn.close() 
+    def is_near_duplicate(self, content, threshold=5):
+        new_fp = compute_fingerprint(content)
+    
+        for url, page_data in self.pages.items():
+            fp = page_data.get("fingerprint")
+            if fp is None:
+                continue
+            try:
+                d = hamming_distance(new_fp, fp)
+                if d <= threshold:
+                    return True, url  # near duplicate found, return url
+            except Exception:
+                continue
+            
+        return False, None  # tthe content is not a near-duplicate 
