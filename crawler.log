@@ -108,3 +108,38 @@
 21:13:31 [INFO] Crawling finished.
 21:13:31 [INFO] Total seen URLs: 2
 21:13:31 [INFO] Total successfully visited URLs: 0
+21:23:39 [INFO] Fetching https://example.com
+21:23:39 [WARNING] Could not read robots.txt for ://: unknown url type: ':///robots.txt'
+21:23:39 [ERROR] Client error while fetching URIReference(scheme='https', authority='example.com', path=None, query=None, fragment=None): URIReference(scheme='https',%20authority='example.com',%20path=None,%20query=None,%20fragment=None)
+21:23:39 [INFO] Fetching https://news.ycombinator.com
+21:23:41 [ERROR] Client error while fetching URIReference(scheme='https', authority='news.ycombinator.com', path=None, query=None, fragment=None): URIReference(scheme='https',%20authority='news.ycombinator.com',%20path=None,%20query=None,%20fragment=None)
+21:24:02 [ERROR] Task exception was never retrieved
+future: <Task finished name='Task-3' coro=<Scheduler.spider() done, defined at /home/toast/Documents/data_science/infoRetr/Exam_IR/scheduler.py:160> exception=NameError("name 'aiohttp' is not defined")>
+Traceback (most recent call last):
+  File "/home/toast/Documents/data_science/infoRetr/Exam_IR/scheduler.py", line 108, in fetch_url
+  File "/home/toast/Documents/data_science/infoRetr/Exam_IR/fetcher.py", line 130, in fetch
+  File "/home/toast/miniconda3/envs/inf_retr/lib/python3.13/site-packages/aiohttp/client.py", line 1482, in __aenter__
+  File "/home/toast/miniconda3/envs/inf_retr/lib/python3.13/site-packages/aiohttp/client.py", line 637, in _request
+aiohttp.client_exceptions.InvalidUrlClientError: URIReference(scheme='https',%20authority='news.ycombinator.com',%20path=None,%20query=None,%20fragment=None)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/toast/Documents/data_science/infoRetr/Exam_IR/scheduler.py", line 166, in spider
+  File "/home/toast/Documents/data_science/infoRetr/Exam_IR/scheduler.py", line 112, in fetch_url
+NameError: name 'aiohttp' is not defined
+21:24:02 [ERROR] Task exception was never retrieved
+future: <Task finished name='Task-2' coro=<Scheduler.spider() done, defined at /home/toast/Documents/data_science/infoRetr/Exam_IR/scheduler.py:160> exception=NameError("name 'aiohttp' is not defined")>
+Traceback (most recent call last):
+  File "/home/toast/Documents/data_science/infoRetr/Exam_IR/scheduler.py", line 108, in fetch_url
+  File "/home/toast/Documents/data_science/infoRetr/Exam_IR/fetcher.py", line 130, in fetch
+  File "/home/toast/miniconda3/envs/inf_retr/lib/python3.13/site-packages/aiohttp/client.py", line 1482, in __aenter__
+  File "/home/toast/miniconda3/envs/inf_retr/lib/python3.13/site-packages/aiohttp/client.py", line 637, in _request
+aiohttp.client_exceptions.InvalidUrlClientError: URIReference(scheme='https',%20authority='example.com',%20path=None,%20query=None,%20fragment=None)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/toast/Documents/data_science/infoRetr/Exam_IR/scheduler.py", line 166, in spider
+  File "/home/toast/Documents/data_science/infoRetr/Exam_IR/scheduler.py", line 112, in fetch_url
+NameError: name 'aiohttp' is not defined
