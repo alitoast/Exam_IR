@@ -74,66 +74,81 @@ class Scheduler:
         """
         self.frontier.task_done()
          
-       
+    async def handle_fetch_failure(self, url, exception):
+        """
+        Handles a failed fetch attempt: retries up to 2 times.
+        """
+        print(f"[Error] Fetch failed for {url}: {exception}")
+        self.retries[url] += 1
+
+        if self.retries[url] <= 2:
+            print(f"[Retry] Re-queuing {url} (attempt {self.retries[url]})")
+            await self.frontier.put(url)
+        else:
+            print(f"[Retry] Giving up on {url} after {self.retries[url]} attempts.")
+
+    async def fetch_url(self, url):
+        """
+        Fetches a URL with concurrency and politeness constraints.
+        Handles retry on failure.
+        """
+        hostname = self.get_hostname(url)
+
+        # enforce both global fetch concurrency and per-host politeness
+        async with self.semaphore:
+            async with self.host_locks[hostname]:
+                print(f"[Crawler] Fetching {url}")
+                try:
+                    response = await self.fetcher.fetch(url)
+                    return response
+                except Exception as e:
+                    await self.handle_fetch_failure(url, e)
+                    self.task_done()
+                    return None
+
+    async def process_response(self, url, response):
+        """
+        Handles a successful fetch: parses, stores, and queues new URLs.
+        """
+        if not response:
+            print(f"[Warning] Empty response for {url}")
+            return
+
+        try:
+            content, final_url, status = response
+        except Exception as e:
+            print(f"[Error] Unexpected response format from {url}: {e}")
+            return
+
+        # Skip non-successful responses or empty content
+        if status != 200 or not content:
+            print(f"[Info] Skipping {url} due to status {status} or empty content.")
+            return
+
+        try:
+            await self.storage.save_page(final_url, content)
+            print(f"Saved {final_url}")
+        except Exception as e:
+            print(f"[Error] Failed to save {final_url}: {e}")
+            return
+
+        try:
+            # Extract and enqueue links found in the page
+            links = self.parser.extract_links(content, final_url)
+            for link in links:
+                await self.add_url(link)
+        except Exception as e:
+            print(f"[Error] Failed to parse links from {final_url}: {e}")
+
     async def spider(self):
         """
         Spider that pulls a URL, fetches it, parses it, and queues new links.
         """
-
         while True:
             url = await self.get_url()
-            hostname = self.get_hostname(url)
-
-            # enforce both global fetch concurrency and per-host politeness
-            async with self.semaphore:
-                async with self.host_locks[hostname]:
-                    print(f"[Crawler] Fetching {url}")
-
-                    try:
-                        response = await self.fetcher.fetch(url)
-
-                    except Exception as e:
-                        print(f"[Error] Fetch failed for {url}: {e}")
-                        self.retries[url] += 1
-                        if self.retries[url] <= 2:
-                            print(f"[Retry] Re-queuing {url} (attempt {self.retries[url]})")
-                            await self.frontier.put(url)    # try again later
-                        self.task_done()
-                        continue 
-
-            self.task_done() 
-
-            if not response:
-                print(f"[Warning] Empty response for {url}")
-                continue  # skip if fetch failed or blocked by robots.txt
-
-            try: 
-                content, final_url, status = response
-
-            except Exception as e:
-                print(f"[Error] Unexpected response format from {url}: {e}")
-                continue
-
-            # skip non-successful responses or empty content
-            if status != 200 or not content:
-                print(f"[Info] Skipping {url} due to status {status} or empty content.")
-                continue
-            
-            try:
-                await self.storage.save_page(final_url, content)
-                print(f"[saved] {final_url}")
-
-            except Exception as e:
-                print(f"[Error] Failed to save {final_url}: {e}")
-                continue
-
-            try: # extract and enqueue links found in the page
-                links = self.parser.extract_links(content, final_url)  
-                for link in links:
-                    await self.add_url(link)
-
-            except Exception as e:
-                print(f"[Error] Failed to parse links from {final_url}: {e}")     
+            response = await self.fetch_url(url)
+            await self.process_response(url, response)
+            self.task_done()      
 
     async def run(self, seeds=None):
         """
