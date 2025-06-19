@@ -200,16 +200,31 @@ class Storage:
             page_type = calculate_page_type(content, url)
             fingerprint = compute_fingerprint(content)
             outlinks = parser.extract_links(content, url) 
+            current_depth = 0 # Default depth 
             logger.info(f"[PAGE] Computed fingerprint and page_type after {time.perf_counter() - mid:.3f} seconds")    
             self.pages[url] = {
                 "fingerprint": fingerprint,
                 "page_type": page_type,
                 "last_fetch": now, 
-                "outlinks": outlinks or [] 
+                "outlinks": outlinks or [],
+                "current_depth": current_depth 
             }   
             self.dirty = True 
             await self.index_terms(url, content, lock_acquired=True)
             logger.info(f"[PAGE] Indexed terms updated after {time.perf_counter() - mid:.3f} seconds")
+
+    def get_page(self, url):
+        """
+        Retrieves the stored metadata for a given URL.
+
+        Args:
+            url (str): The URL of the page to look up.
+
+        Returns:
+            dict | None: A dictionary containing the page metadata if the URL exists,
+                        or None if the URL has not been stored.
+        """
+        return self.pages.get(url)
 
     def get_outlinks(self, url):
         """
