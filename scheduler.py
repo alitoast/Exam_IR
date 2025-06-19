@@ -17,78 +17,81 @@ import logging
 
 from fetcher import Fetcher  
 from parser import Parser    
-from storage import Storage  
-
-# logging set up
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s", # timestamp, level, message
-    datefmt="%H:%M:%S",
-    filename="crawler.log",  # log file
-    filemode="a"  # append to the log file ('w' to overwrite)
-)
+from storage import Storage 
+import utils_async
 
 logger = logging.getLogger(__name__)
 
 class Scheduler:
-    def __init__(self, max_concurrency, num_spiders, max_depth=2):
-        self.frontier = asyncio.Queue() # URLs to crawl
-        self.seen = set()   # tracks seen URLs
-        self.visited = set()    # tracks visited URLs 
-        self.semaphore = asyncio.Semaphore(max_concurrency) # limits max parallel fetches
-        self.host_locks = defaultdict(asyncio.Lock) #{}  # ensures one fetch per host at a time WILL REUSE SAME LOCK?
-        self.retries = defaultdict(int) # dictionary keeps count of how many times retried each URL
+    def __init__(self, max_concurrency, num_spiders, max_depth):
+        self.frontier = asyncio.Queue()  # URLs to crawl
+        self.seen = set()  # tracks seen URLs
+        self.visited = set()  # tracks visited URLs
+        self.semaphore = asyncio.Semaphore(max_concurrency)  # limits max parallel fetches
+        self.host_locks = {}  # ensures one fetch per host at a time
+        self.retries = defaultdict(int)  # dictionary keeps count of how many times retried each URL
+        self.domain_counts = defaultdict(int)   
+        self.max_pages_per_domain = 10  # prevent crawling too many pages from a single domain
 
         self.max_concurrency = max_concurrency
         self.num_spiders = num_spiders
-        self.max_depth=2
+        self.max_depth = max_depth
 
         self.fetcher = Fetcher(None)
         self.parser = Parser()
-        self.storage = Storage ()
- 
-    async def add_url(self, url, depth=0):
+        self.storage = Storage()
+
+    async def add_url(self, url, depth):
         """
-        Add a new URL to the frontier if it hasn't been seen and if depth <= max_depth
+        Add a new URL to the frontier if it hasn't been seen and within depth limit.
         """
-        # provo a normalizzare l'url 
         normalized_url = self.parser.normalize_url(url)
-        if normalized_url not in self.seen and depth <= self.max_depth:
-            self.seen.add(normalized_url)
-            await self.frontier.put((normalized_url, depth))
-            logger.info(f"Added URL to frontier: {normalized_url} at depth {depth}")
+        domain = urlparse(normalized_url).netloc
 
+        if self.domain_counts[domain] >= self.max_pages_per_domain:
+            logger.debug(f"Skipping URL {url} (max pages for domain reached)")
+            return
 
-    async def seed_urls(self, urls):
+        if normalized_url not in self.seen:
+            if depth <= self.max_depth:
+                self.seen.add(normalized_url)
+                await self.frontier.put((depth, normalized_url))
+                logger.info(f"Added URL to frontier: {normalized_url} at depth {depth}")
+                #logger.debug(f"Skipping URL {url} (max depth {self.max_depth} reached, current: {depth})")
+        else:
+            logger.debug(f"Skipping URL {url} at depth {depth} (already seen)")
+
+    async def seed_urls(self, urls, initial_depth=0):
         """
         Seeds the initial URL, or list of URLs, into the queue.
         """
         for url in urls:
-            await self.add_url(url, depth=0)   # passing it to add_url for check
+            await self.add_url(url, initial_depth)  # passing it to add_url for check
+
 
     def get_hostname(self, url):
         """
         Extract the hostname from a URL.
         """
         return urlparse(url).netloc
-    
+
     async def get_url(self):
         """
         Get the next URL from the frontier.
         Wait asynchronously for a URL to be available in the queue.
         """
-        url, depth = await self.frontier.get()
-        logger.info(f"Got URL from frontier: {url} at depth {depth}")
-        return url, depth
+        current_depth, url = await self.frontier.get()
+        logger.debug(f"Got URL from frontier: {url} at depth {current_depth}")
+        return url, current_depth
 
     def task_done(self):
         """
         Mark the current task as completed in the frontier.
         """
         self.frontier.task_done()
-        logger.info(f"Task done. Frontier size: {self.frontier.qsize()}")
+        logger.debug(f"Task done. Frontier size: {self.frontier.qsize()}")
 
-    async def handle_fetch_failure(self, url, exception, depth):
+    async def handle_fetch_failure(self, url, depth, exception):
         """
         Handles a failed fetch attempt: retries up to 2 times.
         """
@@ -96,20 +99,24 @@ class Scheduler:
         self.retries[url] += 1
 
         if self.retries[url] <= 2:
-            logger.info(f"Re-queuing {url} (attempt {self.retries[url]}) at depth {depth}")
-            await self.frontier.put((url, depth))
+            logger.info(f"Re-queuing {url} (attempt {self.retries[url]})")
+            await self.frontier.put((depth, url)) # tuples
         else:
             logger.info(f"Giving up on {url} after {self.retries[url]} attempts.")
 
-
-    async def fetch_url(self, url, depth):
+    async def fetch_url(self, url, current_depth):
         """
         Fetches a URL with concurrency and politeness constraints.
         Handles retry on failure.
         """
         hostname = self.get_hostname(url)
 
-        # Check freshness
+        if hostname not in self.host_locks:
+            self.host_locks[hostname] = asyncio.Lock()
+        
+        lock = self.host_locks[hostname]
+
+        # check freshness: skip if still fresh
         if not self.storage.needs_refresh(url):
             logger.info(f"[SKIP] {url} is fresh, not fetching again.")
             
@@ -119,15 +126,15 @@ class Scheduler:
             
             for link in outlinks:
                 if self.storage.needs_refresh(link):
-                    await self.add_url(link, depth + 1)  # Usa add_url per gestire depth correttamente
+                    await self.add_url(link, current_depth + 1)
                     logger.info(f"[FRONTIER] Added {link} from fresh page {url}")
-
+    
             return None  # Skip fetch, ma hai già gestito i suoi link
 
         # enforce both global fetch concurrency and per-host politeness
         async with self.semaphore:
-            async with self.host_locks[hostname]:
-                logger.info(f"Fetching {url} at depth {depth}")
+            async with lock:
+                logger.info(f"Fetching {url}")
                 start_time = time.perf_counter()  # want to measure time taken for each request
                 try:
                     response = await self.fetcher.fetch(url)
@@ -137,25 +144,24 @@ class Scheduler:
                 except aiohttp.ClientError as e:
                     duration = time.perf_counter() - start_time
                     logger.error(f"Fetch failed for {url} after {duration:.2f}s: {e}")
-                    await self.handle_fetch_failure(url, e, depth)
+                    #await self.handle_fetch_failure(url, e)
                     return None
                 except aiohttp.client_exceptions.InvalidURL as e:
                     logger.error(f"Invalid URL for {url}: {e}")
-                    await self.handle_fetch_failure(url, e, depth)
+                    #await self.handle_fetch_failure(url, e)
                     return None
                 except Exception as e:
                     duration = time.perf_counter() - start_time
                     logger.error(f"Fetch failed for {url} after {duration:.2f}s: {e}")
-                    await self.handle_fetch_failure(url, e, depth)
+                    #await self.handle_fetch_failure(url, e)
                     return None
 
-
-    async def process_response(self, url, depth, response):
+    async def process_response(self, url, response, current_depth):
         """
         Handles a successful fetch: parses, stores, and queues new URLs.
         """
         if not response:
-            logger.warning(f"Empty response for {url} at depth {depth}")
+            logger.warning(f"Empty response for {url}")
             return
 
         try:
@@ -164,15 +170,17 @@ class Scheduler:
             logger.error(f"Unexpected response format from {url}: {e}")
             return
 
-        # Skip non-successful responses or empty content
+        logger.debug(f"Processing response for {url} (status {status})")
+
+        # skip non-successful responses or empty content
         if status != 200 or not content:
-            logger.info(f"Skipping {url} due to status {status} or empty content at depth {depth}.")
+            logger.info(f"Skipping {url} due to status {status} or empty content.")
             return
-        
-        # Check for near-duplicate
+
+        # check for near-duplicate
         is_dup, dup_url = self.storage.is_near_duplicate(content)
         if is_dup:
-            logger.info(f"[SKIP] {url} is a near-duplicate of {dup_url}, skipping save.")
+            logger.info(f"Skipping {url} is a near-duplicate of {dup_url}, skipping save.")
             return
 
         try:
@@ -186,14 +194,14 @@ class Scheduler:
         self.visited.add(final_url)
 
         try:
-            # Extract and enqueue links found in the page
-            links = self.parser.extract_links(content, final_url)
+            # extract and enqueue links found in the page
+            links = self.parser.extract_links(content, final_url,
+                                        sitemaps_urls=self.storage.get_outlinks(final_url),
+                                        useragent=self.fetcher.default_agent)
             for link in links:
-                if depth + 1 <= self.max_depth:
-                    await self.add_url(link, depth + 1)
+                await self.add_url(link, current_depth + 1)
         except Exception as e:
             logger.error(f"Failed to parse links from {final_url}: {e}")
-
 
     async def spider(self):
         """
@@ -201,42 +209,61 @@ class Scheduler:
         """
         while self.running:
             try:
-                url, depth = await asyncio.wait_for(self.get_url(), timeout=5)
+                url, current_depth = await asyncio.wait_for(self.get_url(), timeout=5)
             except asyncio.TimeoutError:
-                # Se nessuna URL arriva per 5 secondi, esci dal loop
+                # if no URL for 5 seconds, exit loop
                 break
 
-            response = await self.fetch_url(url, depth)
-            await self.process_response(url, depth, response)
-            self.task_done()
-
-
+            try:
+                response = await self.fetch_url(url, current_depth)
+                await self.process_response(url, response, current_depth)
+            except Exception as e:
+                logger.error(f"Spider encountered error on {url}: {e}")
+            finally:
+                self.task_done()
 
     async def run(self, seeds=None):
+        """
+        Starts the crawling loop with multiple concurrent spiders.
+        Creates num_spiders number of tasks.
+        Each one runs self.worker(fetcher, parser)
+        Uses asyncio.create_task() to run them concurrently
+        """
         if not seeds:
             seeds = ["https://example.com"]
+        
+        start_time = time.time()
+        logger.info(f"Starting crawl at {time.strftime('%H:%M:%S')}")
 
         await self.storage.async_init()
-
-        # Aggiungo i seed alla coda
-        await self.seed_urls(seeds)
+        await self.seed_urls(seeds, initial_depth=0)  # add seeds to frontier
 
         async with aiohttp.ClientSession() as session:
-            self.fetcher = Fetcher(session)
+            # initialize fetcher with the session
+            self.fetcher = Fetcher(session) 
+
+            # Get the default user agent from the fetcher
+            user_agent = self.fetcher.default_agent
 
             unique_hosts = {urlparse(url).netloc for url in seeds}
             for host in unique_hosts:
                 site_url = f"https://{host}"
-                await self.fetcher.check_robots(site_url)
+                await self.fetcher.check_robots(site_url, useragent=user_agent)
 
-            self.running = True  # Attiva il flag di esecuzione
+            self.running = True  # execution flag
             spiders = [asyncio.create_task(self.spider()) for _ in range(self.num_spiders)]
 
-            await self.frontier.join()  # Aspetta che la coda sia vuota
-            self.running = False        # Ferma gli spider
+            try:
+                await asyncio.wait_for(self.frontier.join(), timeout=3600)  # wait for frontier to be empty with a reasonable timeout
+            except asyncio.TimeoutError:
+                logger.warning("Frontier join timed out, stopping spiders")
+            finally:
+                self.running = False  # stop spiders
+
+            duration = time.time() - start_time
+            logger.info(f"Crawling completed after {duration:.2f} seconds")
 
             await asyncio.gather(*spiders, return_exceptions=True)
-
             await self.storage.commit()
 
             logger.info("Crawling finished.")
