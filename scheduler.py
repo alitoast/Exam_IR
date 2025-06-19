@@ -134,6 +134,10 @@ class Scheduler:
         if not response:
             logger.warning(f"Empty response for {url}")
             return
+        
+        if response is None:
+            logger.warning(f"Empty response for {url}")
+            return
 
         try:
             content, final_url, status = response
@@ -141,7 +145,9 @@ class Scheduler:
             logger.error(f"Unexpected response format from {url}: {e}")
             return
 
-        # Skip non-successful responses or empty content
+        logger.debug(f"Processing response for {url} (status {status})")
+
+        # skip non-successful responses or empty content
         if status != 200 or not content:
             logger.info(f"Skipping {url} due to status {status} or empty content.")
             return
@@ -176,9 +182,14 @@ class Scheduler:
         """
         while True:
             url = await self.get_url()
-            response = await self.fetch_url(url)
-            await self.process_response(url, response)
-            self.task_done()
+            try:
+                response = await self.fetch_url(url)
+                if response:
+                    await self.process_response(url, response)
+            except Exception as e:
+                logger.error(f"Unhandled exception while processing {url}: {e}")
+            finally:
+                self.task_done()
 
     async def run(self, seeds=None):
         """
