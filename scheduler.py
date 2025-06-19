@@ -50,10 +50,12 @@ class Scheduler:
         """
         Add a new URL to the frontier if it hasn't been seen.
         """
-        if url not in self.seen:
-            self.seen.add(url)
-            await self.frontier.put(url)
-            logger.info(f"Added URL to frontier: {url}")
+        # provo a normalizzare l'url 
+        normalized_url = self.parser.normalize_url(url)
+        if normalized_url not in self.seen:
+            self.seen.add(normalized_url)
+            await self.frontier.put((normalized_url))
+            logger.info(f"Added URL to frontier: {normalized_url}")
 
     async def seed_urls(self, urls):
         """
@@ -104,10 +106,20 @@ class Scheduler:
         """
         hostname = self.get_hostname(url)
 
-        # Check freshness: skip if still fresh
+        # Check freshness
         if not self.storage.needs_refresh(url):
-            logger.info(f"[SKIP] {url} is fresh, skipping fetch.")
-            return None
+            logger.info(f"[SKIP] {url} is fresh, not fetching again.")
+            
+            # Controlla e gestisci gli outlink già estratti da quella pagina
+            outlinks = self.storage.get_outlinks(url)
+            logger.info(f"[OUTLINKS] Checking {len(outlinks)} links from fresh page: {url}")
+            
+            for link in outlinks:
+                if self.storage.needs_refresh(link):
+                    await self.frontier.add_url(link)
+                    logger.info(f"[FRONTIER] Added {link} from fresh page {url}")
+    
+            return None  # Skip fetch, ma hai già gestito i suoi link
 
         # enforce both global fetch concurrency and per-host politeness
         async with self.semaphore:

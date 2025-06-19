@@ -1,6 +1,6 @@
 import logging
 import re
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urlparse, urljoin, urldefrag
 import xml.etree.ElementTree as ET
 from bs4 import BeautifulSoup, Comment
 import rfc3986
@@ -31,15 +31,18 @@ class Parser:
 
     def normalize_url(self, url):
         try:
+            #   provo a cambiare qualcosa qui 
+            url, _ = urldefrag(url) #remove fragments (e.g. #sectio)
             uri = rfc3986.uri_reference(url).normalize()
-            return uri.unsplit()
+            normalized = uri.unsplit().rstrip('/')
+            return normalized 
         except Exception as e:
             logger.error("Error normalizing URL %s: %s", url, e)
             return url
 
     def check_spider_traps(self, url):
         MAX_URL_LENGTH = 200
-        MAX_PATH_DEPTH = 6
+        MAX_PATH_DEPTH = 5
         trap_pattern = re.compile(r"(calendar|sessionid|track|ref|sort|date=|page=\d{3,})", re.IGNORECASE)
 
         parsed = urlparse(url)
