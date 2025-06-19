@@ -11,15 +11,6 @@ import logging
 
 from utils_async import calculate_page_type, compute_fingerprint, preprocess, to_gap_encoding, compute_age, hamming_distance
 
-# logging set up
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s", # timestamp, level, message
-    datefmt="%H:%M:%S",
-    filename="crawler.log",  # log file
-    filemode="a"  # append to the log file ('w' to overwrite)
-)
-
 logger = logging.getLogger(__name__)
 
 #   Lambda mapping for different page types 
