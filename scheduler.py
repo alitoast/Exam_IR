@@ -202,9 +202,13 @@ class Scheduler:
                 # if no URL for 5 seconds, exit loop
                 break
 
-            response = await self.fetch_url(url)
-            await self.process_response(url, response, current_depth)
-            self.task_done()
+            try:
+                response = await self.fetch_url(url)
+                await self.process_response(url, response, current_depth)
+            except Exception as e:
+                logger.error(f"Spider encountered error on {url}: {e}")
+            finally:
+                self.task_done()
 
     async def run(self, seeds=None):
         """
