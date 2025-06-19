@@ -185,7 +185,9 @@ class Scheduler:
 
         try:
             # extract and enqueue links found in the page
-            links = self.parser.extract_links(content, final_url)
+            links = self.parser.extract_links(content, final_url,
+                                        sitemaps_urls=self.storage.get_outlinks(final_url),
+                                        useragent=self.fetcher.default_agent)
             for link in links:
                 await self.add_url(link, current_depth + 1)
         except Exception as e:
@@ -224,12 +226,16 @@ class Scheduler:
         await self.seed_urls(seeds, initial_depth=0)  # add seeds to frontier
 
         async with aiohttp.ClientSession() as session:
-            self.fetcher = Fetcher(session)  # create Fetcher *after* session
+            # initialize fetcher with the session
+            self.fetcher = Fetcher(session) 
+
+            # Get the default user agent from the fetcher
+            user_agent = self.fetcher.default_agent
 
             unique_hosts = {urlparse(url).netloc for url in seeds}
             for host in unique_hosts:
                 site_url = f"https://{host}"
-                await self.fetcher.check_robots(site_url)
+                await self.fetcher.check_robots(site_url, useragent=user_agent)
 
             self.running = True  # execution flag
             spiders = [asyncio.create_task(self.spider()) for _ in range(self.num_spiders)]

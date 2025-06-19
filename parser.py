@@ -75,10 +75,9 @@ Use Cases:
 """
 import pandas as pd
 import re
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 import urllib.robotparser #per gestire il file robot.txt
 import xml.etree.ElementTree as ET  #per gestire i file xml
-import requests #per http
 import time #per gestire il tempo
 from bs4 import BeautifulSoup #per gestire il parsing del html (si può usare anche per xml)
 import rfc3986 # per la normalizzazione degli urls
@@ -186,44 +185,44 @@ class Parser:
         return pd.DataFrame(all_entries, columns=['url', 'priority', 'update']).drop_duplicates()
 
     def extract_links(self, html, base_url, sitemaps_urls=None, useragent=None):
-     """
-     Estrae URL da href/src in html, normalizza e converte in assoluti rispetto a base_url,
-     filtra contro spider traps e path disallow del useragent.
-     Torna la lista unita di URL vecchi + nuovi, senza duplicati.
-     """
-     if sitemaps_urls is None:
-        sitemaps_urls = []
+        """
+        Estrae URL da href/src in html, normalizza e converte in assoluti rispetto a base_url,
+        filtra contro spider traps e path disallow del useragent.
+        Torna la lista unita di URL vecchi + nuovi, senza duplicati.
+        """
+        if sitemaps_urls is None:
+            sitemaps_urls = []
 
-     soup = BeautifulSoup(html, "html.parser")
-     raw_urls = []
+        soup = BeautifulSoup(html, "html.parser")
+        raw_urls = []
 
-     # Estrai href e src
-     for tag in soup.find_all(href=True):
-        raw_urls.append(tag['href'].strip())
-     for tag in soup.find_all(src=True):
-        raw_urls.append(tag['src'].strip())
+        # Estrai href e src
+        for tag in soup.find_all(href=True):
+            raw_urls.append(tag['href'].strip())
+        for tag in soup.find_all(src=True):
+            raw_urls.append(tag['src'].strip())
 
-     # Converti in URL assoluti
-     absolute_urls = [urljoin(base_url, url) for url in raw_urls]
+        # Converti in URL assoluti
+        absolute_urls = [urljoin(base_url, url) for url in raw_urls]
 
-     # Normalizza
-     normalized_urls = [self.normalize_url(url) for url in absolute_urls]
+        # Normalizza
+        normalized_urls = [self.normalize_url(url) for url in absolute_urls]
 
-     # Filtra per robots.txt disallow
-     if useragent.path_disallow != None:
-        disallowed = useragent.path_disallow
-        normalized_urls = [
-            url for url in normalized_urls
-            if all(path not in url for path in disallowed)
-        ]
+        # Filtra per robots.txt disallow - more robust null checks
+        if useragent and hasattr(useragent, 'path_disallow') and useragent.path_disallow:
+            disallowed = useragent.path_disallow
+            normalized_urls = [
+                url for url in normalized_urls
+                if all(path not in url for path in disallowed)
+            ]
 
-     # Filtra spider traps
-     filtered_urls = [url for url in normalized_urls if self.check_spider_traps(url)]
+        # Filtra spider traps
+        filtered_urls = [url for url in normalized_urls if self.check_spider_traps(url)]
 
-     # Unisci con sitemap_urls e rimuovi duplicati
-     all_urls = set(sitemaps_urls).union(filtered_urls)
+        # Unisci con sitemap_urls e rimuovi duplicati
+        all_urls = set(sitemaps_urls).union(filtered_urls)
 
-     return list(all_urls)
+        return list(all_urls)
 
     def parse_page_tags_all(self, html, tags_type=None):
         if tags_type is None:

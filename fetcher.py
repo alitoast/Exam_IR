@@ -139,7 +139,9 @@ class Fetcher:
         }
         self.default_agent = self.useragents.get(useragent_name, self.useragents["Googlebot"])
 
-
+    def get_user_agent(self):
+        return self.default_agent
+        
     async def check_robots(self, url, useragent=None):
         if not useragent:
             useragent = self.default_agent
