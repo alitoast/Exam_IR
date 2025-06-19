@@ -17,16 +17,9 @@ import logging
 
 from fetcher import Fetcher  
 from parser import Parser    
-from storage import Storage  
+from storage import Storage 
+import utils_async
 
-# logging set up
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s", # timestamp, level, message
-    datefmt="%H:%M:%S",
-    filename="crawler.log",  # log file
-    filemode="a"  # append to the log file ('w' to overwrite)
-)
 
 logger = logging.getLogger(__name__)
 
@@ -186,15 +179,19 @@ class Scheduler:
         if not seeds:
             seeds = ["https://example.com"]
 
-        async with self.fetcher:  # manages aiohttp session
+        await self.fetcher.start() # manages aiohttp session  EXPLICIT OPEN
+        try:
             await self.seed_urls(seeds)
             spiders = [asyncio.create_task(self.spider()) for _ in range(self.num_spiders)]
 
-            await self.frontier.join()  # wait for all items in queue to be fully processed
-            for s in spiders:
-                s.cancel()  # cancel all spiders after done so it doesn't run forever
+            await self.frontier.join()  # wait for all crawling to finish
 
+            for s in spiders:
+                s.cancel()  # stop all spiders after done so it doesn't run forever
             await asyncio.gather(*spiders, return_exceptions=True)
+        finally:
+            await self.fetcher.finish(None, None, None)  # EXPLICIT CLOSE
+
             logger.info("Crawling finished.")
             logger.info(f"Total seen URLs: {len(self.seen)}")
             logger.info(f"Total successfully visited URLs: {len(self.visited)}")
