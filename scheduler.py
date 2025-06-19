@@ -17,7 +17,7 @@ import logging
 
 from fetcher import Fetcher  
 from parser import Parser    
-from storage import Storage  
+from storage_async import Storage  
 
 # logging set up
 logging.basicConfig(
@@ -42,7 +42,7 @@ class Scheduler:
         self.max_concurrency = max_concurrency
         self.num_spiders = num_spiders
 
-        self.fetcher = Fetcher()
+        self.fetcher = Fetcher(None)
         self.parser = Parser()
         self.storage = Storage ()
  
@@ -181,31 +181,40 @@ class Scheduler:
         """
         Spider that pulls a URL, fetches it, parses it, and queues new links.
         """
-        while True:
-            url = await self.get_url()
+        while self.running:
+            try:
+                url = await asyncio.wait_for(self.get_url(), timeout=5)
+            except asyncio.TimeoutError:
+                # Se nessuna URL arriva per 5 secondi, esci dal loop
+                break
+
             response = await self.fetch_url(url)
             await self.process_response(url, response)
             self.task_done()
 
+
     async def run(self, seeds=None):
-        """
-        Starts the crawling loop with multiple concurrent spiders.
-        Creates num_spiders number of tasks.
-        Each one runs self.worker(fetcher, parser)
-        Uses asyncio.create_task() to run them concurrently
-        """
         if not seeds:
             seeds = ["https://example.com"]
 
         await self.storage.async_init()
 
-        async with self.fetcher:  # manages aiohttp session
-            await self.seed_urls(seeds)
+        # Aggiungo i seed alla coda
+        await self.seed_urls(seeds)
+
+        async with aiohttp.ClientSession() as session:
+            self.fetcher = Fetcher(session)
+
+            unique_hosts = {urlparse(url).netloc for url in seeds}
+            for host in unique_hosts:
+                site_url = f"https://{host}"
+                await self.fetcher.check_robots(site_url)
+
+            self.running = True  # Attiva il flag di esecuzione
             spiders = [asyncio.create_task(self.spider()) for _ in range(self.num_spiders)]
 
-            await self.frontier.join()  # wait for all items in queue to be fully processed
-            for s in spiders:
-                s.cancel()  # cancel all spiders after done so it doesn't run forever
+            await self.frontier.join()  # Aspetta che la coda sia vuota
+            self.running = False        # Ferma gli spider
 
             await asyncio.gather(*spiders, return_exceptions=True)
 

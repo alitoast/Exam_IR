@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 from fetcher import Fetcher 
 from parser import Parser 
 
-fetcher = Fetcher() 
+fetcher = Fetcher(None) 
 parser = Parser() 
 
 #   Check if the necessary NLTK resources have been downloaded. Otherwise, download them.
