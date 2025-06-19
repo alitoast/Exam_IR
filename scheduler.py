@@ -230,8 +230,12 @@ class Scheduler:
             self.running = True  # execution flag
             spiders = [asyncio.create_task(self.spider()) for _ in range(self.num_spiders)]
 
-            await self.frontier.join()  # wait for frontier to be empty
-            self.running = False  # stop spiders
+            try:
+                await asyncio.wait_for(self.frontier.join(), timeout=3600)  # wait for frontier to be empty with a reasonable timeout
+            except asyncio.TimeoutError:
+                logger.warning("Frontier join timed out, stopping spiders")
+            finally:
+                self.running = False  # stop spiders
 
             await asyncio.gather(*spiders, return_exceptions=True)
 
