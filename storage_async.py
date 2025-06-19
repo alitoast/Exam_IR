@@ -110,6 +110,7 @@ class Storage:
         self.index_file = index_file
         self.pages = {}
         self.inverted_index = {}
+        self.dirty = False 
         self._lock = asyncio.Lock()
 
     async def async_init(self): 
@@ -120,10 +121,10 @@ class Storage:
     async def _load_json_async(self, filename):
         if not os.path.exists(filename):
             return None
+        logger.debug(f"[LOAD] Attempting to load JSON file: {filename}")
         try:
             async with aiofiles.open(filename, "r", encoding="utf-8") as f:
                 content = await f.read()
-            # Parse json in thread pool per sicurezza
             return await asyncio.to_thread(json.loads, content)
         except Exception as e:
             logger.error(f"Failed to load JSON file {filename}: {e}")
@@ -133,10 +134,13 @@ class Storage:
         if not data:
             logger.info(f"[DEBUG] {filename} vuoto. Scrittura saltata.")
             return
+        logger.debug(f"[SAVE] Attempting to save {filename}, records: {len(data)}")
         async with self._lock:
             try:
+                logger.debug(f"Inizio scrittura file {filename} (dimensione dati: {len(json.dumps(data))} bytes)")
                 async with aiofiles.open(filename, "w", encoding="utf-8") as f:
                     await f.write(json.dumps(data, indent=2))
+                logger.debug(f"Scrittura file {filename} completata")
             except Exception as e:
                 logger.error(f"Failed to save JSON file {filename}: {e}")
 
@@ -151,6 +155,7 @@ class Storage:
             return None
 
     async def save_page(self, url, content):
+        logger.info(f"[PAGE] Saving page: {url}")
         async with self._lock: 
             now = time.time()
             page_type = calculate_page_type(content, url)
@@ -162,13 +167,15 @@ class Storage:
                 "page_type": page_type,
                 "last_fetch": now
             }
-
+            self.dirty = True 
             await self.index_terms(url, content, lock_acquired=True)
 
     async def index_terms(self, url, content, lock_acquired=False):
+        logger.debug(f"[INDEX] Starting index for {url}, lock_acquired={lock_acquired}")
         if not lock_acquired:
             async with self._lock:
                 await self._index_terms_internal(url, content)
+                self.dirty = True 
         else:
             await self._index_terms_internal(url, content)
 
@@ -178,6 +185,7 @@ class Storage:
             raise ValueError(f"URL {url} not found in pages")
 
         words = await preprocess(content)
+        logger.debug(f"[INDEX] Indexing {len(words)} words for {url}")
         tf = Counter()
         positions = {}
 
@@ -203,6 +211,7 @@ class Storage:
                 "positions": positions[term]
             }
 
+        logger.debug(f"[INDEX] Updated index with {len(tf)} unique terms for {url}")
         # await self._save_json_async(self.index_file, self.inverted_index)
 
     def get_page(self, url):
@@ -257,17 +266,19 @@ class Storage:
         return False, None
 
     async def commit(self):
+        if not self.dirty:
+            logger.info("[COMMIT] Nessuna modifica da salvare. Commit saltato.")
+            return        
         logger.info(f"[DEBUG] Tentativo di commit. pages: {len(self.pages)}, index: {len(self.inverted_index)}")
-        if not self.pages and not self.inverted_index:
-            logger.info("Nessun dato da salvare. Salvataggio saltato.")
-            return
-        
         async with self._lock:
-            await asyncio.gather(
-                self._save_json_async(self.pages_file, self.pages),
-                self._save_json_async(self.index_file, self.inverted_index)
-            )
+            logger.debug("Inizio salvataggio pages_file")
+            await self._save_json_async(self.pages_file, self.pages)
+            logger.debug("pages_file salvato, inizio salvataggio index_file")
+            await self._save_json_async(self.index_file, self.inverted_index)
+            logger.debug("index_file salvato")
+
         logger.info("Files pages.json and inverted_index.json saved!")
+
 
 
 
