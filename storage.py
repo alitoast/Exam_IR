@@ -102,7 +102,7 @@ class Storage:
     def __init__(self, pages_file="data/pages.json", index_file="data/inverted_index.json"):
         self.pages_file = pages_file
         self.index_file = index_file
-        os.makedirs(os.path.dirname(self.pages_file), exist_ok=True)  # create data directory if it doesn't exist
+        os.makedirs(os.path.dirname(pages_file), exist_ok=True)  # create data directory if it doesn't exist
         self.pages = {}
         self.inverted_index = {}
         self.dirty = False 
@@ -166,13 +166,15 @@ class Storage:
             now = time.time()
             page_type = calculate_page_type(content, url)
             fingerprint = compute_fingerprint(content)
-            outlinks = parser.extract_links(content, url) 
+            outlinks = parser.extract_links(content, url)
+            current_depth = 0  # Default depth 
             logger.info(f"[PAGE] Computed fingerprint e page_type dopo {time.perf_counter() - mid:.3f} secondi")    
             self.pages[url] = {
                 "fingerprint": fingerprint,
                 "page_type": page_type,
                 "last_fetch": now, 
-                "outlinks": outlinks or [] 
+                "outlinks": outlinks or [] ,
+                "current_depth": current_depth
             }   
             self.dirty = True 
             await self.index_terms(url, content, lock_acquired=True)

@@ -64,9 +64,13 @@ class Scheduler:
             next_depth = current_depth + 1
             if next_depth < self.max_depth:
                 self.seen.add(normalized_url)
-                await self.frontier.put((current_depth + 1, normalized_url))
+                await self.frontier.put((next_depth, normalized_url))
                 logger.info(f"Added URL to frontier: {normalized_url} at depth {current_depth + 1}")
                 self.domain_counts[domain] += 1
+
+                # Update the page metadata with current_depth
+                if url in self.storage.pages:
+                    self.storage.pages[url]['current_depth'] = next_depth - 1
             else:
                 logger.debug(f"Skipping URL {url} (max depth reached)")
         else:
@@ -114,7 +118,7 @@ class Scheduler:
         else:
             logger.info(f"Giving up on {url} after {self.retries[url]} attempts.")
 
-    async def fetch_url(self, url):
+    async def fetch_url(self, url, current_depth):
         """
         Fetches a URL with concurrency and politeness constraints.
         Handles retry on failure.
@@ -129,6 +133,10 @@ class Scheduler:
         # check freshness: skip if still fresh
         if not self.storage.needs_refresh(url):
             logger.info(f"[SKIP] {url} is fresh, not fetching again.")
+
+            # Get the current depth from storage (fallback to 0)
+            page = self.storage.get_page(url)
+            current_depth = getattr(page, 'current_depth', 0)
             
             # Controlla e gestisci gli outlink già estratti da quella pagina
             outlinks = self.storage.get_outlinks(url)
@@ -136,8 +144,9 @@ class Scheduler:
             
             for link in outlinks:
                 if self.storage.needs_refresh(link):
-                    await self.add_url(link, current_depth + 1)
-                    logger.info(f"[FRONTIER] Added {link} from fresh page {url}")
+                    # Use current_depth + 1 with fallback to max_depth
+                    next_depth = min(current_depth + 1, self.max_depth)
+                    await self.add_url(link, next_depth)
     
             return None  # Skip fetch, ma hai già gestito i suoi link
 
@@ -225,7 +234,7 @@ class Scheduler:
                 break
 
             try:
-                response = await self.fetch_url(url)
+                response = await self.fetch_url(url,current_depth)
                 await self.process_response(url, response, current_depth)
             except Exception as e:
                 logger.error(f"Spider encountered error on {url}: {e}")
