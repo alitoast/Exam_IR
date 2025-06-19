@@ -93,25 +93,21 @@ start_url = "https://www.bbc.com/"
 
 
 # Useragents
+# Useragents
 useragent_dict = {
-    "Googlebot": UserAgentPolicy("Googlebot", None, None, None, None, 1e9,
-                                 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)', set()),
-    
-    "Bingbot": UserAgentPolicy("Bingbot", None, None, None, None, 1e9,
-                               'Mozilla/5.0 (compatible; Bingbot/2.0; +http://www.bing.com/bingbot.htm)', set()),
-    
-    "Slurp": UserAgentPolicy("Slurp", None, None, None, None, 1e9,
-                             'Mozilla/5.0 (compatible; Yahoo! Slurp; http://help.yahoo.com/help/us/ysearch/slurp)', set()),
-    
-    "DuckDuckbot": UserAgentPolicy("DuckDuckbot", None, None, None, None, 1e9,
-                                   'DuckDuckBot/1.0; (+http://duckduckgo.com/duckduckbot.html)', set()),
-    
-    "Yandex": UserAgentPolicy("Yandex", None, None, None, None, 1e9,
-                              'Mozilla/5.0 (compatible; YandexBot/3.0; +http://yandex.com/bots)', set()),
-    
-    "*": UserAgentPolicy("*", None, None, None, None, 1e9,
-                         'Mozilla/5.0 (compatible; MyBot/1.0; +http://example.com/bot)', set())
+    "Googlebot": UserAgentPolicy("Googlebot",'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'),
+
+    "Bingbot": UserAgentPolicy("Bingbot",'Mozilla/5.0 (compatible; Bingbot/2.0; +http://www.bing.com/bingbot.htm)'),
+
+    "Slurp": UserAgentPolicy("Slurp",'Mozilla/5.0 (compatible; Yahoo! Slurp; http://help.yahoo.com/help/us/ysearch/slurp)'),
+
+    "DuckDuckbot": UserAgentPolicy("DuckDuckbot",'DuckDuckBot/1.0; (+http://duckduckgo.com/duckduckbot.html)'),
+
+    "Yandex": UserAgentPolicy("Yandex", 'Mozilla/5.0 (compatible; YandexBot/3.0; +http://yandex.com/bots)'),
+
+    "*": UserAgentPolicy("*",'Mozilla/5.0 (compatible; MyBot/1.0; +http://example.com/bot)')
 }
+
 
 default_agent = useragent_dict["Googlebot"]
 
@@ -122,187 +118,119 @@ useragent_dict_header = {'Googlebot':'Mozilla/5.0 (compatible; Googlebot/2.1; +h
                     'DuckDuckbot':'DuckDuckBot/1.0; (+http://duckduckgo.com/duckduckbot.html)',
                     'Yandex':'Mozilla/5.0 (compatible; YandexBot/3.0; +http://yandex.com/bots)',
                     '*': 'Mozilla/5.0 (compatible; MyBot/1.0; +http://example.com/bot)'}
-
-
 class UserAgentPolicy:
-  '''
-     Class to identify user agents and store relevant information to manage their requests appropriately over time
-  '''
-  def __init__(self, name, base_url, path_disallow, crawl_delay, request_rate,last_access, header, visited):
-        self.lock = asyncio.Lock()
-        self.base_url = base_url
+    def __init__(self, name, header):
         self.name = name
-        self.path_disallow = path_disallow
-        self.crawl_delay = crawl_delay
-        self.request_rate = request_rate
-        self.last_access = last_access
         self.header = header
-        self.visited = visited
+        self.base_url = None
+        self.path_disallow = None
+        self.crawl_delay = None
+        self.request_rate = None
+        self.last_access = 1e9
+        self.visited = set()
+        self.lock = asyncio.Lock()
 
 
-# Setup logging configuration
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    datefmt='%H:%M:%S'
-)
+class Fetcher:
+    def __init__(self, session, useragent_name="Googlebot"):
+        self.session = session
+        self.useragents = {
+            "Googlebot": UserAgentPolicy("Googlebot", 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'),
+            "Bingbot": UserAgentPolicy("Bingbot", 'Mozilla/5.0 (compatible; Bingbot/2.0; +http://www.bing.com/bingbot.htm)'),
+            "*": UserAgentPolicy("*", 'Mozilla/5.0 (compatible; MyBot/1.0; +http://example.com/bot)'),
+        }
+        self.default_agent = self.useragents.get(useragent_name, self.useragents["Googlebot"])
 
-logger = logging.getLogger(__name__)
 
+    async def check_robots(self, url, useragent=None):
+        if not useragent:
+            useragent = self.default_agent
+        useragent.base_url = url
+        new_url = url.rstrip("/") + "/robots.txt"
 
-async def check_robots(url,useragent=default_agent):
-
-  '''
-    Inputs:
-        url (str): The base URL of the website to analyze.
-        useragent (class): The user agent to use when checking access permissions. Default is '*'.
-
-    Output:
-        sitemap (list or None): List of sitemap URLs found in robots.txt, if any.
-
-    Description:
-        This function checks the robots.txt file of a given website to determine:
-        - Whether the given user agent is allowed to fetch content.
-        - Which paths are disallowed for the user agent.
-        - The crawl delay and request rate for the user agent.
-        - Any sitemap URLs provided in the robots.txt.
-
-        It updates the given useragent object with these details.
-    '''
-
-  useragent.base_url = url
-
-  # Initialize the robot parser
-  rfl = urllib.robotparser.RobotFileParser()
-  # Construct the full URL to the robots.txt file
-  new_url = url + "/robots.txt"
-
-  try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(new_url, timeout=10) as response:
+        rfl = urllib.robotparser.RobotFileParser()
+        try:
+            async with self.session.get(new_url, timeout=10) as response:
                 if response.status == 200:
                     robots_txt = await response.text()
-                    # Setup and parse with robotparser
-                    rfl.set_url(new_url)
                     rfl.parse(robots_txt.splitlines())
+                    logging.info(f"Fetched robots.txt: {new_url}")
                 else:
                     logging.warning(f"Failed to fetch robots.txt: HTTP {response.status}")
                     return None
-  except aiohttp.ClientError as e:
-        logging.error(f"Error fetching robots.txt from {robots_url}: {e}")
-        return None
+        except aiohttp.ClientError as e:
+            logging.error(f"Error fetching robots.txt: {e}")
+            return None
 
+        useragent.path_disallow = rfl.parse("Disallow")
+        useragent.crawl_delay = rfl.crawl_delay(useragent.name)
+        useragent.request_rate = rfl.request_rate(useragent.name)
 
-  # Check if the user agent is allowed to fetch its own robots.txt
-  if rfl.can_fetch(useragent.name, new_url):
-        logging.info(f"{useragent.name} is allowed to fetch {new_url}")
-  else:
-        logging.warning(f"{useragent.name} is NOT allowed to fetch {new_url}")
+        return rfl.site_maps()
 
-  # Check if the useragent can fetch the informations   
-  check = rfl.can_fetch(useragent.name,new_url)
-  
-  # Retrieve the list of the path not to follow
-  path_disallow = rfl.parse("Disallow")
-  useragent.path_disallow = path_disallow
+    async def check_time(self, useragent):
+        async with useragent.lock:
+            if useragent.request_rate and useragent.crawl_delay:
+                request_delay = (useragent.request_rate[1] * 1e9) / useragent.request_rate[0]
+                crawl_delay = useragent.crawl_delay * 1e9
+                delay = max(request_delay, crawl_delay)
+            elif useragent.crawl_delay:
+                delay = useragent.crawl_delay * 1e9
+            elif useragent.request_rate:
+                delay = (useragent.request_rate[1] * 1e9) / useragent.request_rate[0]
+            else:
+                delay = 1.5 * 1e9  # default delay
+            logging.info(f"Delay: {delay / 1e9} seconds")
+            now = time.monotonic_ns()
+            wait = max(0, (useragent.last_access + delay) - now)
+            if wait > 0:
+                await asyncio.sleep(wait / 1e9)
+            useragent.last_access = time.monotonic_ns()
+            logging.info(f"{useragent.name} Last access: {useragent.last_access / 1e9} seconds")
 
-  # Retrieve the crawl delay (minimum interval between requests)
-  crawl_delay = rfl.crawl_delay(useragent.name)
-  useragent.crawl_delay = crawl_delay
+    async def fetch(self, url, useragent=None):
+      if not useragent:
+          useragent = self.default_agent
 
-  # Retrieve the request rate (tuple of requests per time interval)
-  request_rate = rfl.request_rate(useragent.name)
-  useragent.request_rate = request_rate
+      if url in useragent.visited:
+          logging.warning(f"[{useragent.name}] Page already visited: {url}")
+          return None
 
-  # Retrieve any sitemap URLs declared in the robots.txt
-  sitemap = rfl.site_maps()
+      await self.check_time(useragent)
 
-  return sitemap
+      headers = {'User-Agent': useragent.header}
 
+      start_time = time.perf_counter()
+      try:
+          async with self.session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=20)) as response:
+              duration = time.perf_counter() - start_time
 
-async def check_time(useragent=default_agent):
+              if response.status == 200:
+                  #content_type = response.headers.get('Content-Type', '').lower()
+                  #if 'text/html' in content_type:
+                      html = await response.text()
+                      logging.info(f"[{useragent.name}] Fetched HTML page: {url} in {duration:.2f}s")
+                      print(f"[{useragent.name}] Fetched HTML page: {url} in {duration:.2f}s")
+                      useragent.visited.add(url)
+                      return (html, str(response.url), response.status)
+                  #else:
+                      #logging.warning(f"[{useragent.name}] Skipping non-HTML content: {url} (Content-Type: {content_type})")
+                      #return None
+              else:
+                  logging.warning(f"[{useragent.name}] Failed to fetch {url}: HTTP {response.status} in {duration:.2f}s")
+                  print(f"[{useragent.name}] Failed to fetch {url}: HTTP {response.status} in {duration:.2f}s")
+                  return None
 
-  '''
-    Inputs:
-        useragent (UserAgentPolicy): The user agent object containing rate-limiting information.
+      except asyncio.TimeoutError:
+          duration = time.perf_counter() - start_time
+          logging.error(f"[{useragent.name}] Timeout after {duration:.2f}s fetching {url}")
+          return None
+      except aiohttp.ClientError as e:
+          duration = time.perf_counter() - start_time
+          logging.error(f"[{useragent.name}] Client error fetching {url} after {duration:.2f}s: {e}")
+          return None
+      except Exception as e:
+          duration = time.perf_counter() - start_time
+          logging.error(f"[{useragent.name}] Unexpected error fetching {url} after {duration:.2f}s: {e}")
+          return None
 
-    Output:
-      None
-
-    Description:
-        Ensures that the user agent respects the specified crawl delay and request rate policies:
-        - Calculates the appropriate delay based on the more restrictive value between `crawl_delay` and `request_rate`.
-        - If neither is defined, defaults to a delay of 1.5 seconds.
-        - Ensures the delay is respected by pausing execution as needed.
-        - Updates `last_access` to the current time after waiting.
-  '''
-  # To avoid simultaneous tasks between same useragents
-  async with useragent.lock:  
-    # If both crawl_delay and request_rate are defined, use the more restrictive one (converted to nanoseconds)
-    if useragent.request_rate and useragent.crawl_delay:
-         # Calculate delay from request rate: total interval (in ns) divided by number of requests
-        request_delay = (useragent.request_rate[1] * 1e9) / useragent.request_rate[0]
-        # Convert crawl delay from seconds to nanoseconds
-        crawl_delay = useragent.crawl_delay * 1e9
-        # Use the larger (i.e., more restrictive) delay
-         delay = max(request_delay, crawl_delay)
-
-    elif useragent.crawl_delay:
-         delay = useragent.crawl_delay * 1e9
-
-    elif useragent.request_rate:
-         delay = (useragent.request_rate[1] * 1e9) / useragent.request_rate[0]
-
-    # If neither crawl_delay and request rate are defined, use a default delay of 1.5 seconds
-    else:
-        delay = 1.5 * 1e9  # 1.5 secondi in nanosecondi
-
-    # Get the current time in nanoseconds
-    now = time.monotonic_ns()
-    wait = max(0, (useragent.last_access + delay) - now)
-
-    if wait > 0:
-         await asyncio.sleep(wait / 1e9)
-
-    # Update last_access to the current time to enforce timing on next request
-    useragent.last_access = time.monotonic_ns()
-
-async def fetch(url, useragent=default_agent):
-    '''
-    Inputs:
-        url (str): The target URL to fetch.
-        useragent (UserAgentPolicy): The user agent object containing headers and rate-limiting rules.
-
-    Outputs:
-        str or None: The HTML content of the page if the request is successful (HTTP 200), otherwise None.
-
-    Description:
-        Sends an HTTP GET request to the specified URL, respecting the request policies defined for the given user agent.
-    '''
-
-    # Check if the page has been visited already
-    if url in useragent.visited:
-        logging.warning("Page visited already")
-        return None
-
-    # Enforce crawl delay and request rate restrictions for the user agent
-    await check_time(useragent)
-
-    headers = {
-        'User-Agent': useragent.header
-    }
-
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers, timeout=10) as response:
-                if response.status == 200:
-                    html = await response.text()
-                    logging.info("Page successfully recovered")
-                    useragent.visited.add(url)
-                    return html
-                else:
-                    logging.warning(f"Page not available: {url} (Status {response.status})")
-                    return None
-    except aiohttp.ClientError as e:
-        logging.error(f"Error, impossible to fetch {url}: {e}")
-        return None
