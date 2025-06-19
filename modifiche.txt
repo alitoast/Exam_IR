@@ -14,4 +14,9 @@ ELENCO MODIFICHE:
 		  sa che è un duplicato di fetch_url nello scheduler
 		  h inserito un check sul tipo di contenuto preso
 
-	- 
+
+15:00
+
+	SCHEDULER: ho aggiunto la variabile fetcher per gestire le variabili di sessione, 
+		   non conosco il modo più furbo
+		   - ho cambiato la definizione di self.host_locks = defaultdict(lambda: asyncio.Lock())
