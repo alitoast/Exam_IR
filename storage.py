@@ -1,20 +1,48 @@
 """
-Storage module (Asynchronous)
+Storage Module (Asynchronous)
+=============================
 
-The Storage module provides persistent management and indexing of web page data. 
-It handles loading and saving page metadata and an inverted index from JSON files asynchronously with 
-proper locking to ensure data consistency during concurrent access. The module supports operations 
-such as saving new page content, updating the inverted index with term frequencies and positions, 
-checking for page refresh needs based on custom aging heuristics, and detecting near-duplicate pages 
-via Simhash fingerprinting. 
-It acts as the core component for storing, retrieving, and maintaining up-to-date page information 
-efficiently.
+Description:
+------------
+This module provides asynchronous tools for persistent storage and indexing of web page data, 
+designed to support a web crawler.
+It maintains structured metadata about pages — such as timestamps, classification types, link structures, and Simhash fingerprints —
+and constructs an inverted index for fast term lookup.
+All I/O operations are non-blocking and synchronized with locking mechanisms to ensure consistency during concurrent access.
 
+Key Features:
+-------------
+- Asynchronous loading and saving of metadata and inverted index (JSON-based)
+- Fine-grained concurrency control using `asyncio.Lock`
+- Page classification and aging for adaptive refresh strategies
+- Simhash-based near-duplicate detection using Hamming distance
+- Gap-encoded positional inverted indexing
+- Integration with external preprocessing and parsing modules
+- Persistent commit mechanism to serialize in-memory state to disk
+
+Dependencies:
+-------------
+- `aiofiles`            : Asynchronous file reading and writing
+- `asyncio`             : Core library for async event loop and locking
+- `json`                : Serialization and deserialization of data
+- `time`                : Timestamping for page fetch and age computation
+- `os`                  : File system operations and path management
+- `collections.Counter` : Term frequency counting
+- `logging`             : Structured logging and debug output
+- `parser`              : Custom HTML parser for extracting links
+- `utils_async`         : Utilities for preprocessing, Simhash, encoding, and age modeling
+
+Use Cases:
+----------
+- Asynchronous, fault-tolerant storage backend for a web crawler
+- Detection and prevention of near-duplicate content indexing
+- Efficient inverted indexing for term-based retrieval systems
+- Smart refresh scheduling of pages based on content volatility
+- Persistent and recoverable storage of crawl metadata across sessions
 """
 
-#   ----- Libraries and resources to import -----
+#   ----- Libraries and dependencies -----
 
-#   Libraries to import 
 import aiofiles
 import asyncio
 import json
@@ -52,69 +80,46 @@ class Storage:
         pages (dict): In-memory dictionary of pages metadata.
         inverted_index (dict): In-memory inverted index mapping terms to postings.
         _lock (asyncio.Lock): Async lock to protect concurrent file access.
-
-    Methods:
-        __init__(pages_file, index_file):
-            Synchronous constructor that sets file paths and initializes empty dictionaries for 
-            `pages` and `inverted_index`. 
-            It creates an asynchronous lock to manage concurrent write operations.
-
-        async_init():
-            Asynchronously loads data from JSON files.
-
-        _load_json_async(filename):
-            Loads JSON file asynchronously, returns dict or None.
-
-        _save_json_async(filename, data):
-            Saves data as JSON asynchronously under lock.
-
-        save_page(url, content):
-            Saves a page's metadata and indexes its terms asynchronously.
-
-        index_terms(url, content, lock_acquired=False):
-            Indexes terms of a page asynchronously, optionally assuming lock is held.
-
-        _index_terms_internal(url, content):
-            Internal method to perform term indexing and update inverted index.
-
-        get_page(url):
-            Retrieves metadata dictionary for a given URL.
-
-        get_page_type(url):
-            Retrieves the type classification of a stored page.
-
-        get_last_fetch(url):
-            Retrieves the last fetch timestamp of a stored page.
-
-        get_tf(term):
-            Retrieves term frequency postings for a term.
-
-        needs_refresh(url):
-            Determines if a page should be re-fetched based on its age and type.
-
-        is_near_duplicate(content, threshold=5):
-            Checks if the content is near-duplicate of any stored page.
-
-        commit():
-            Saves pages metadata and inverted index to disk asynchronously.
     """
 
     def __init__(self, pages_file="data/pages.json", index_file="data/inverted_index.json"):
+        """
+        Initializes the Storage object with file paths and in-memory data structures.
+        Args:
+            pages_file (str): Path to the pages metadata JSON file.
+            index_file (str): Path to the inverted index JSON file.
+        Returns:
+            None
+        """
         self.pages_file = pages_file
         self.index_file = index_file
         self.pages = {}
         self.inverted_index = {}
         self.dirty = False 
         self._lock = asyncio.Lock()
-
         os.makedirs(os.path.dirname(self.pages_file), exist_ok=True)
 
     async def async_init(self): 
+        """
+        Asynchronously loads the pages metadata and inverted index from disk.
+
+        Returns:
+            None
+        """
         self.pages = await self._load_json_async(self.pages_file) or {}
         self.inverted_index = await self._load_json_async(self.index_file) or {}
         logger.info(f"Storage initialized. Loaded {len(self.pages)} pages and {len(self.inverted_index)} terms.")
 
     async def _load_json_async(self, filename):
+        """
+        Loads a JSON file asynchronously.
+
+        Args:
+            filename (str): Path to the JSON file.
+
+        Returns:
+            dict or None: Parsed JSON data, or None if file is missing or invalid.
+        """
         if not os.path.exists(filename):
             return None
         logger.debug(f"[LOAD] Attempting to load JSON file: {filename}")
@@ -134,6 +139,16 @@ class Storage:
             return {}
 
     async def _save_json_async(self, filename, data):
+        """
+        Saves a dictionary as a JSON file asynchronously.
+
+        Args:
+            filename (str): Path to the JSON file.
+            data (dict): Data to serialize and write.
+
+        Returns:
+            None
+        """
         if not data:
             logger.info(f"[DEBUG] {filename} vuoto. Scrittura saltata.")
             return
@@ -148,6 +163,15 @@ class Storage:
 
 
     def _load_json_sync(self, filename):
+        """
+        Loads a JSON file synchronously.
+
+        Args:
+            filename (str): Path to the JSON file.
+
+        Returns:
+            dict or None: Parsed JSON data, or None if file is missing or invalid.
+        """
         if not os.path.exists(filename):
             return None
         try:
@@ -158,16 +182,24 @@ class Storage:
             return None
 
     async def save_page(self, url, content):
-        start = time.perf_counter() #   debug
+        """
+        Saves page metadata and indexes terms for a given page.
+        Args:
+            url (str): page URL.
+            content (str): text content of the page.
+        Returns:
+            None
+        """
+        start = time.perf_counter() 
         logger.info(f"[PAGE] Saving page: {url}")
         async with self._lock: 
             mid = time.perf_counter()
-            logger.info(f"[PAGE] Lock acquisito dopo {mid - start:.3f} secondi")
+            logger.info(f"[PAGE] Lock acquired after {mid - start:.3f} seconds")
             now = time.time()
             page_type = calculate_page_type(content, url)
             fingerprint = compute_fingerprint(content)
             outlinks = parser.extract_links(content, url) 
-            logger.info(f"[PAGE] Computed fingerprint e page_type dopo {time.perf_counter() - mid:.3f} secondi")    
+            logger.info(f"[PAGE] Computed fingerprint and page_type after {time.perf_counter() - mid:.3f} seconds")    
             self.pages[url] = {
                 "fingerprint": fingerprint,
                 "page_type": page_type,
@@ -176,9 +208,18 @@ class Storage:
             }   
             self.dirty = True 
             await self.index_terms(url, content, lock_acquired=True)
-            logger.info(f"[PAGE] Indexed terms e aggiornato struttura dopo {time.perf_counter() - mid:.3f} secondi")
+            logger.info(f"[PAGE] Indexed terms updated after {time.perf_counter() - mid:.3f} seconds")
 
     def get_outlinks(self, url):
+        """
+        Retrieves the list of outlinks for a given page URL.
+
+        Args:
+            url (str): Page URL.
+
+        Returns:
+            list: List of outlink URLs, or empty list if not found.
+        """    
         page = self.pages.get(url)
         if page:
             return page.get("outlinks", [])
@@ -186,6 +227,17 @@ class Storage:
 
 
     async def index_terms(self, url, content, lock_acquired=False):
+        """
+        Indexes terms of a page content asynchronously.
+
+        Args:
+            url (str): Page URL.
+            content (str): Raw page content.
+            lock_acquired (bool): If True, assumes the lock is already held.
+
+        Returns:
+            None
+        """
         logger.debug(f"[INDEX] Starting index for {url}, lock_acquired={lock_acquired}")
         if not lock_acquired:
             async with self._lock:
@@ -196,6 +248,16 @@ class Storage:
 
 
     async def _index_terms_internal(self, url, content):
+        """
+        Internal method for term extraction and inverted index update.
+
+        Args:
+            url (str): Page URL.
+            content (str): Raw page content.
+
+        Returns:
+            None
+        """
         if url not in self.pages:
             raise ValueError(f"URL {url} not found in pages")
 
@@ -227,29 +289,18 @@ class Storage:
             }
 
         logger.debug(f"[INDEX] Updated index with {len(tf)} unique terms for {url}")
-        # await self._save_json_async(self.index_file, self.inverted_index)
 
-    #   non viene mai chiamata qui, forse da cancellare? 
-    def get_page(self, url):
-        return self.pages.get(url)
-
-    #   non viene mai chiamata qui, forse da cancellare? 
-    def get_page_type(self, url):
-        page = self.pages.get(url)
-        if page:
-            return page.get("page_type")
-        return None
-
-    def get_last_fetch(self, url):
-        page = self.pages.get(url)
-        if page:
-            return page.get("last_fetch")
-        return None
-
-    def get_tf(self, term):
-        return self.inverted_index.get(term, {})
 
     def needs_refresh(self, url):
+        """
+        Determines whether a page needs to be re-fetched based on its age and type.
+
+        Args:
+            url (str): Page URL.
+
+        Returns:
+            bool: True if the page should be refreshed, else False.
+        """
         page = self.pages.get(url)
         if not page:
             return True
@@ -269,6 +320,16 @@ class Storage:
         return age > threshold
 
     def is_near_duplicate(self, content, threshold=5):
+        """
+        Checks if the provided content is a near-duplicate of any stored page.
+
+        Args:
+            content (str): Page content to check.
+            threshold (int): Hamming distance threshold for duplicate detection.
+
+        Returns:
+            tuple: (bool, str or None) — True and matched URL if duplicate is found, else (False, None).
+        """
         new_fp = compute_fingerprint(content)
         for url, page_data in self.pages.items():
             fp = page_data.get("fingerprint")
@@ -283,16 +344,22 @@ class Storage:
         return False, None
 
     async def commit(self):
+        """
+        Asynchronously saves in-memory pages and inverted index to disk if changes were made.
+
+        Returns:
+            None
+        """
         if not self.dirty:
-            logger.info("[COMMIT] Nessuna modifica da salvare. Commit saltato.")
+            logger.info("[COMMIT] No changes to save. Skip commit.")
             return        
-        logger.info(f"[DEBUG] Tentativo di commit. pages: {len(self.pages)}, index: {len(self.inverted_index)}")
+        logger.info(f"[DEBUG] Commiting changes. Pages {len(self.pages)}, index terms: {len(self.inverted_index)}")
         async with self._lock:
-            logger.debug("Inizio salvataggio pages_file")
+            logger.debug("Saving pages_file")
             await self._save_json_async(self.pages_file, self.pages)
-            logger.debug("pages_file salvato, inizio salvataggio index_file")
+            logger.debug("pages_file saved, saving index_file")
             await self._save_json_async(self.index_file, self.inverted_index)
-            logger.debug("index_file salvato")
+            logger.debug("index_file saved")
 
         logger.info("Files pages.json and inverted_index.json saved!")
 
