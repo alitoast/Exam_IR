@@ -30,6 +30,8 @@ class Scheduler:
         self.semaphore = asyncio.Semaphore(max_concurrency)  # limits max parallel fetches
         self.host_locks = {}  # ensures one fetch per host at a time
         self.retries = defaultdict(int)  # dictionary keeps count of how many times retried each URL
+        self.domain_counts = defaultdict(int)   
+        self.max_pages_per_domain = 10  # prevent crawling too many pages from a single domain
 
         self.max_concurrency = max_concurrency
         self.num_spiders = num_spiders
@@ -43,14 +45,25 @@ class Scheduler:
         """
         Add a new URL to the frontier if it hasn't been seen and within depth limit.
         """
-        # provo a normalizzare l'url 
+        # url normalization 
         normalized_url = self.parser.normalize_url(url)
+        domain = urlparse(normalized_url).netloc
+
+        # check if we've reached max pages for this domain
+        if self.domain_counts[domain] >= self.max_pages_per_domain:
+            logger.debug(f"Skipping URL {url} (max pages for domain reached)")
+            return
+
         if normalized_url not in self.seen:
-            self.seen.add(normalized_url)
-            await self.frontier.put((current_depth, normalized_url))
-            logger.info(f"Added URL to frontier: {normalized_url}")
+            if current_depth < self.max_depth:
+                self.seen.add(normalized_url)
+                await self.frontier.put((current_depth + 1, normalized_url))
+                logger.info(f"Added URL to frontier: {normalized_url} at depth {current_depth + 1}")
+                self.domain_counts[domain] += 1
+            else:
+                logger.debug(f"Skipping URL {url} (max depth reached)")
         else:
-            logger.debug(f"Skipping URL {url} at depth {current_depth} (max depth reached or already seen)")
+            logger.debug(f"Skipping URL {url} at depth {current_depth} (already seen)")
 
     async def seed_urls(self, urls, initial_depth=0):
         """
