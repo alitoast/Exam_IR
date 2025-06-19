@@ -116,7 +116,7 @@ class Scheduler:
             
             for link in outlinks:
                 if self.storage.needs_refresh(link):
-                    await self.frontier.add_url(link, current_depth + 1)
+                    await self.add_url(link, current_depth + 1)
                     logger.info(f"[FRONTIER] Added {link} from fresh page {url}")
     
             return None  # Skip fetch, ma hai già gestito i suoi link

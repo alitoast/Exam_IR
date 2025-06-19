@@ -78,6 +78,7 @@ import re
 from urllib.parse import urlparse
 import urllib.robotparser #per gestire il file robot.txt
 import xml.etree.ElementTree as ET  #per gestire i file xml
+import requests #per http
 import time #per gestire il tempo
 from bs4 import BeautifulSoup #per gestire il parsing del html (si può usare anche per xml)
 import rfc3986 # per la normalizzazione degli urls
@@ -209,7 +210,7 @@ class Parser:
      normalized_urls = [self.normalize_url(url) for url in absolute_urls]
 
      # Filtra per robots.txt disallow
-     if useragent and hasattr(useragent, 'path_disallow'):
+     if useragent.path_disallow != None:
         disallowed = useragent.path_disallow
         normalized_urls = [
             url for url in normalized_urls
