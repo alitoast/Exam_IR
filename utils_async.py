@@ -1,14 +1,18 @@
 """
-Utils module (Asynchronous)
-============================= 
-The Helpers module contains utility functions focused on text preprocessing, linguistic analysis, 
-and data transformations used throughout the project. 
-It provides functions for part-of-speech tagging mapped to WordNet categories, tokenization and 
-lemmatization of raw text, calculation of Simhash fingerprints for duplicate detection, and conversion 
-utilities for gap-encoded positional data. Additionally, it offers heuristics to classify page types 
-based on URL and content keywords, and methods to compute aging metrics for content freshness. 
-These helper functions encapsulate reusable logic for natural language processing and data handling 
-to support higher-level storage and indexing operations.
+Utils Module (Asynchronous)
+===========================
+
+This module provides asynchronous utility functions for NLP preprocessing, content fingerprinting,
+gap encoding, and heuristic classification. These functions support the content fetching, parsing,
+and indexing pipeline of a crawler or search engine.
+
+Dependencies:
+-------------
+- `nltk`                : Tokenization, stopwords, POS tagging, lemmatization
+- `numpy`               : Numerical aging model
+- `simhash`             : Duplicate detection via fingerprinting
+- `asyncio`             : Async execution handling
+- `logging`             : Debug and performance logging
 """
 
 
@@ -28,14 +32,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-#   Functions imported from other modules of the project
+# Functions imported from other modules of the project
 from fetcher import Fetcher 
 from parser import Parser 
 
 fetcher = Fetcher(None) 
 parser = Parser() 
 
-#   Check if the necessary NLTK resources have been downloaded. Otherwise, download them.
+# Ensure NLTK resources are available
 for resource in ["stopwords", "wordnet", "punkt", "averaged_perceptron_tagger", "omw-1.4"]:
     try:
         nltk.data.find(f"corpora/{resource}")
@@ -67,15 +71,13 @@ def get_wordnet_pos(tag):
 
 def preprocess_sync(text):
     """
-    Synchronously preprocesses text by tokenizing, filtering, POS tagging,
-    and lemmatizing.
-    Input:
+    Synchronously preprocesses text: tokenization, stopword removal, POS tagging, lemmatization.
+
+    Args:
         text (str): Raw input text.
-    Output:
-        list of str: Preprocessed and lemmatized tokens.
-    Description:
-        Performs tokenization, removes stopwords and numeric words, tags POS,
-        and lemmatizes tokens to their base form.
+
+    Returns:
+        list[str]: Cleaned and lemmatized token list.
     """
     stop_words = set(stopwords.words("english"))
     lemmatizer = WordNetLemmatizer()
@@ -87,14 +89,13 @@ def preprocess_sync(text):
 
 async def preprocess(text):
     """
-    Asynchronously preprocesses text by running synchronous preprocessing
-    in a separate thread.
-    Input:
+    Asynchronously preprocesses text by running the synchronous pipeline in a thread.
+
+    Args:
         text (str): Raw input text.
-    Output:
-        list of str: Preprocessed and lemmatized tokens.
-    Description:
-        Wraps synchronous preprocessing to avoid blocking the async event loop.
+
+    Returns:
+        list[str]: Cleaned and lemmatized tokens..
     """
     start = time.perf_counter()
     result = await asyncio.to_thread(preprocess_sync, text) 
@@ -105,14 +106,13 @@ async def preprocess(text):
 
 async def content_page(url):
     """
-    Fetches HTML content from a URL asynchronously and parses text content.
-    Input:
-        url (str): URL of the webpage.
-    Output:
-        str: Concatenated textual content extracted from the page.
-    Description:
-        Uses asynchronous fetch and synchronous parser to retrieve and process
-        page content for indexing or analysis.
+    Fetches the HTML page and extracts visible textual content.
+
+    Args:
+        url (str): Target URL to crawl.
+
+    Returns:
+        str: Concatenated page content text.
     """
     start = time.perf_counter()
     html = await fetcher.fetch(url)
@@ -125,14 +125,13 @@ async def content_page(url):
 
 def compute_fingerprint(text):
     """ 
-        Computes a 64-bit Simhash fingerprint for a given text.
-    Input:
-        text (str): Text to fingerprint.
-    Output:
-        int: Simhash fingerprint value.
-    Description:
-        Uses synchronous preprocessing to tokenize and lemmatize the text,
-        then computes a Simhash to represent the text compactly for near-duplicate detection.
+    Computes a Simhash fingerprint from the provided text.
+
+    Args:
+        text (str): Input text.
+
+    Returns:
+        int: 64-bit Simhash value.
     """
     words = preprocess_sync(text)
     return Simhash(words).value
@@ -140,14 +139,14 @@ def compute_fingerprint(text):
 
 def hamming_distance(fp1, fp2):
     """
-    Computes the Hamming distance between two 64-bit integer fingerprints.
-    Input:
-        fp1 (int): First fingerprint.
-        fp2 (int): Second fingerprint.
-    Output:
-        int: Number of differing bits.
-    Description:
-        Counts differing bits between two fingerprints to measure similarity.
+    Calculates the Hamming distance between two fingerprints.
+
+    Args:
+        fp1 (int): First Simhash value.
+        fp2 (int): Second Simhash value.
+
+    Returns:
+        int: Bitwise difference count.
     """
     x = (fp1 ^ fp2) & ((1 << 64) - 1)
     distance = 0
@@ -159,14 +158,14 @@ def hamming_distance(fp1, fp2):
 
 def compute_age(lambda_, t):
     """
-    Computes the age of content using an exponential decay model.
-    Input:
-        lambda_ (float): Decay rate parameter.
-        t (float): Time since last fetch (e.g., in days).
-    Output:
-        float: Computed age score.
-    Description:
-        Models content freshness with an aging function based on decay lambda.
+    Applies exponential decay to estimate content freshness.
+
+    Args:
+        lambda_ (float): Decay rate.
+        t (float): Time since last fetch (e.g., days).
+
+    Returns:
+        float: Age score reflecting staleness.
     """
     if lambda_ == 0:
         return t
@@ -175,14 +174,14 @@ def compute_age(lambda_, t):
 
 def calculate_page_type(content, url=""):
     """
-    Classifies a page type based on URL and content heuristics.
-    Input:
-        content (str): Text content of the page.
-        url (str): URL of the page (optional).
-    Output:
+    Heuristically determines page type based on content and URL.
+
+    Args:
+        content (str): Visible text from page.
+        url (str, optional): Page URL.
+
+    Returns:
         str: One of "frequent", "occasional", "static", or "default".
-    Description:
-        Uses keywords and URL patterns to assign a frequency category to the page.
     """
     content = content.lower()
     url = url.lower()
@@ -214,13 +213,13 @@ def calculate_page_type(content, url=""):
 
 def from_gap_encoding(gaps):
     """
-    Decodes a list of gap-encoded positions back into absolute positions.
-    Input:
-        gaps (list of int): Gap-encoded positions.
-    Output:
-        list of int: Absolute positions.
-    Description:
-        Reconstructs absolute token positions from gap-encoded format.
+    Converts gap-encoded token positions into absolute positions.
+
+    Args:
+        gaps (list[int]): List of gap-encoded positions.
+
+    Returns:
+        list[int]: Reconstructed absolute positions.
     """
     if not gaps:
         return []
@@ -232,13 +231,13 @@ def from_gap_encoding(gaps):
 
 def to_gap_encoding(positions):
     """
-    Encodes a list of absolute positions into gap-encoded format.
-    Input:
-        positions (list of int): Absolute token positions.
-    Output:
-        list of int: Gap-encoded positions.
-    Description:
-        Compresses positions by storing gaps between successive positions.
+    Converts absolute token positions to gap-encoded format.
+
+    Args:
+        positions (list[int]): Token positions in absolute format.
+
+    Returns:
+        list[int]: Gap-encoded representation.
     """
     if not positions:
         return []
