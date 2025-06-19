@@ -16,6 +16,7 @@ to support higher-level storage and indexing operations.
 import asyncio
 import numpy as np 
 import nltk 
+import time 
 from collections import Counter
 from simhash import Simhash 
 from nltk import pos_tag, word_tokenize
@@ -95,7 +96,11 @@ async def preprocess(text):
     Description:
         Wraps synchronous preprocessing to avoid blocking the async event loop.
     """
-    return await asyncio.to_thread(preprocess_sync, text)
+    start = time.perf_counter()
+    result = await asyncio.to_thread(preprocess_sync, text) 
+    end = time.perf_counter() 
+    logger.info(f"[PREPROCESS] Text processed in {end - start:.3f} seconds")
+    return result
 
 
 async def content_page(url):
@@ -109,8 +114,12 @@ async def content_page(url):
         Uses asynchronous fetch and synchronous parser to retrieve and process
         page content for indexing or analysis.
     """
+    start = time.perf_counter()
     html = await fetcher.fetch(url)
+    mid = time.perf_counter() 
     text_from_page = parser.parse_page_tags_all(html)
+    end = time.perf_counter()
+    logger.info(f"[FETCH] Fetch: {mid - start:.3f}s, Parse: {end - mid:.3f}s")
     return ' '.join(text_from_page)
 
 

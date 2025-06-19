@@ -135,14 +135,14 @@ class Storage:
             logger.info(f"[DEBUG] {filename} vuoto. Scrittura saltata.")
             return
         logger.debug(f"[SAVE] Attempting to save {filename}, records: {len(data)}")
-        async with self._lock:
-            try:
-                logger.debug(f"Inizio scrittura file {filename} (dimensione dati: {len(json.dumps(data))} bytes)")
-                async with aiofiles.open(filename, "w", encoding="utf-8") as f:
-                    await f.write(json.dumps(data, indent=2))
-                logger.debug(f"Scrittura file {filename} completata")
-            except Exception as e:
-                logger.error(f"Failed to save JSON file {filename}: {e}")
+        try:
+            logger.debug(f"Inizio scrittura file {filename} (dimensione dati: {len(json.dumps(data))} bytes)")
+            async with aiofiles.open(filename, "w", encoding="utf-8") as f:
+                await f.write(json.dumps(data, indent=2))
+            logger.debug(f"Scrittura file {filename} completata")
+        except Exception as e:
+            logger.error(f"Failed to save JSON file {filename}: {e}")
+
 
     def _load_json_sync(self, filename):
         if not os.path.exists(filename):
@@ -155,13 +155,15 @@ class Storage:
             return None
 
     async def save_page(self, url, content):
+        start = time.perf_counter() #   debug
         logger.info(f"[PAGE] Saving page: {url}")
         async with self._lock: 
+            mid = time.perf_counter()
+            logger.info(f"[PAGE] Lock acquisito dopo {mid - start:.3f} secondi")
             now = time.time()
             page_type = calculate_page_type(content, url)
             fingerprint = compute_fingerprint(content)
-            logger.info(f"Saving page: {url}")
-
+            logger.info(f"[PAGE] Computed fingerprint e page_type dopo {time.perf_counter() - mid:.3f} secondi")    
             self.pages[url] = {
                 "fingerprint": fingerprint,
                 "page_type": page_type,
@@ -169,6 +171,8 @@ class Storage:
             }
             self.dirty = True 
             await self.index_terms(url, content, lock_acquired=True)
+            logger.info(f"[PAGE] Indexed terms e aggiornato struttura dopo {time.perf_counter() - mid:.3f} secondi")
+
 
     async def index_terms(self, url, content, lock_acquired=False):
         logger.debug(f"[INDEX] Starting index for {url}, lock_acquired={lock_acquired}")
