@@ -23,82 +23,42 @@ LAMBDA_BY_TYPE = {
 
 
 class Storage:
-
-    """
-    Asynchronous storage manager for pages metadata and inverted index.
-
-    Attributes:
-        pages_file (str): Path to the JSON file storing pages metadata.
-        index_file (str): Path to the JSON file storing inverted index.
-        pages (dict): In-memory dictionary of pages metadata.
-        inverted_index (dict): In-memory inverted index mapping terms to postings.
-        _lock (asyncio.Lock): Async lock to protect concurrent file access.
-
-    Methods:
-        __init__(pages_file, index_file):
-            Initializes storage, loads data from disk synchronously.
-
-        _load_json_async(filename):
-            Loads JSON file asynchronously, returns dict or None.
-
-        _save_json_async(filename, data):
-            Saves data as JSON asynchronously under lock.
-
-        save_page(url, content):
-            Saves a page's metadata and indexes its terms asynchronously.
-
-        index_terms(url, content, lock_acquired=False):
-            Indexes terms of a page asynchronously, optionally assuming lock is held.
-
-        _index_terms_internal(url, content):
-            Internal method to perform term indexing and update inverted index.
-
-        get_page(url):
-            Retrieves metadata dictionary for a given URL.
-
-        get_page_type(url):
-            Retrieves the type classification of a stored page.
-
-        get_last_fetch(url):
-            Retrieves the last fetch timestamp of a stored page.
-
-        get_tf(term):
-            Retrieves term frequency postings for a term.
-
-        needs_refresh(url):
-            Determines if a page should be re-fetched based on its age and type.
-
-        is_near_duplicate(content, threshold=5):
-            Checks if the content is near-duplicate of any stored page.
-
-        commit():
-            Saves pages metadata and inverted index to disk asynchronously.
-    """
-
     def __init__(self, pages_file="data/pages.json", index_file="data/inverted_index.json"):
         self.pages_file = pages_file
         self.index_file = index_file
-        self.pages = self._load_json_sync(self.pages_file) or {}
-        self.inverted_index = self._load_json_sync(self.index_file) or {}
-        self._lock = asyncio.Lock()  # Per salvataggi async
+        self.pages = {}
+        self.inverted_index = {}
+        self.dirty = False 
+        self._lock = asyncio.Lock()
+
+    async def async_init(self): 
+        self.pages = await self._load_json_async(self.pages_file) or {}
+        self.inverted_index = await self._load_json_async(self.index_file) or {}
+        logger.info(f"Storage initialized. Loaded {len(self.pages)} pages and {len(self.inverted_index)} terms.")
 
     async def _load_json_async(self, filename):
         if not os.path.exists(filename):
             return None
+        logger.debug(f"Attempting to load JSON file: {filename}")
         try:
             async with aiofiles.open(filename, "r", encoding="utf-8") as f:
                 content = await f.read()
-            # Parse json in thread pool per sicurezza
             return await asyncio.to_thread(json.loads, content)
         except Exception as e:
             logger.error(f"Failed to load JSON file {filename}: {e}")
             return None
 
     async def _save_json_async(self, filename, data):
+        if not data:
+            logger.debug(f"Scrittura saltata. {filename} vuoto.")
+            return
+        logger.debug(f"Attempting to save {filename}, records: {len(data)}")
         async with self._lock:
             try:
+                logger.debug(f"Inizio scrittura file {filename} (dimensione dati: {len(json.dumps(data))} bytes)")
                 async with aiofiles.open(filename, "w", encoding="utf-8") as f:
                     await f.write(json.dumps(data, indent=2))
+                logger.debug(f"Scrittura file {filename} completata")
             except Exception as e:
                 logger.error(f"Failed to save JSON file {filename}: {e}")
 
@@ -113,7 +73,8 @@ class Storage:
             return None
 
     async def save_page(self, url, content):
-        async with self._lock:
+        logger.info(f"[PAGE] Saving page: {url}")
+        async with self._lock: 
             now = time.time()
             page_type = calculate_page_type(content, url)
             fingerprint = compute_fingerprint(content)
@@ -124,21 +85,25 @@ class Storage:
                 "page_type": page_type,
                 "last_fetch": now
             }
-
+            self.dirty = True 
             await self.index_terms(url, content, lock_acquired=True)
 
     async def index_terms(self, url, content, lock_acquired=False):
+        logger.debug(f"[INDEX] Starting index for {url}, lock_acquired={lock_acquired}")
         if not lock_acquired:
             async with self._lock:
                 await self._index_terms_internal(url, content)
+                self.dirty = True 
         else:
             await self._index_terms_internal(url, content)
+
 
     async def _index_terms_internal(self, url, content):
         if url not in self.pages:
             raise ValueError(f"URL {url} not found in pages")
 
         words = await preprocess(content)
+        logger.debug(f"Indexing {len(words)} words for {url}")
         tf = Counter()
         positions = {}
 
@@ -164,7 +129,8 @@ class Storage:
                 "positions": positions[term]
             }
 
-        await self._save_json_async(self.index_file, self.inverted_index)
+        logger.debug(f"Updated index with {len(tf)} unique terms for {url}")
+        # await self._save_json_async(self.index_file, self.inverted_index)
 
     def get_page(self, url):
         return self.pages.get(url)
@@ -218,9 +184,15 @@ class Storage:
         return False, None
 
     async def commit(self):
+        if not self.dirty:
+            logger.info("[COMMIT] Nessuna modifica da salvare. Commit saltato.")
+            return        
+        logger.debug(f"Tentativo di commit. pages: {len(self.pages)}, index: {len(self.inverted_index)}")
         async with self._lock:
-            await asyncio.gather(
-                self._save_json_async(self.pages_file, self.pages),
-                self._save_json_async(self.index_file, self.inverted_index)
-            )
+            logger.debug("Inizio salvataggio pages_file")
+            await self._save_json_async(self.pages_file, self.pages)
+            logger.debug("pages_file salvato, inizio salvataggio index_file")
+            await self._save_json_async(self.index_file, self.inverted_index)
+            logger.debug("index_file salvato")
+
         logger.info("Files pages.json and inverted_index.json saved!")
