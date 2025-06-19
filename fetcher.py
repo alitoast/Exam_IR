@@ -69,7 +69,6 @@ To use this module, install the required packages:
 
 #pip install rfc3986
 
-import pandas as pd
 import re
 from urllib.parse import urlparse
 import urllib.robotparser #per gestire il file robot.txt
