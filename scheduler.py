@@ -118,7 +118,7 @@ class Scheduler:
         else:
             logger.info(f"Giving up on {url} after {self.retries[url]} attempts.")
 
-    async def fetch_url(self, url, current_depth):
+    async def fetch_url(self, url, initial_depth):
         """
         Fetches a URL with concurrency and politeness constraints.
         Handles retry on failure.
@@ -136,7 +136,7 @@ class Scheduler:
 
             # Get the current depth from storage (fallback to 0)
             page = self.storage.get_page(url)
-            current_depth = getattr(page, 'current_depth', 0)
+            current_depth = getattr(page, 'current_depth', initial_depth)
             
             # Controlla e gestisci gli outlink già estratti da quella pagina
             outlinks = self.storage.get_outlinks(url)
