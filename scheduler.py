@@ -137,8 +137,10 @@ class Scheduler:
         self.retries[url] += 1
 
         if self.retries[url] <= 2:
+            # re-queue with the same depth after a bit
+            await asyncio.sleep(2 ** (self.retries[url]))
+            await self.frontier.put((depth, url))
             logger.info(f"Re-queuing {url} (attempt {self.retries[url]})")
-            await self.frontier.put((depth, url)) # tuples
         else:
             logger.info(f"Giving up on {url} after {self.retries[url]} attempts.")
 
@@ -192,16 +194,16 @@ class Scheduler:
                 except aiohttp.ClientError as e:
                     duration = time.perf_counter() - start_time
                     logger.error(f"Fetch failed for {url} after {duration:.2f}s: {e}")
-                    #await self.handle_fetch_failure(url, e)
+                    await self.handle_fetch_failure(url, current_depth, e)
                     return None
                 except aiohttp.client_exceptions.InvalidURL as e:
                     logger.error(f"Invalid URL for {url}: {e}")
-                    #await self.handle_fetch_failure(url, e)
+                    await self.handle_fetch_failure(url, current_depth, e)
                     return None
                 except Exception as e:
                     duration = time.perf_counter() - start_time
                     logger.error(f"Fetch failed for {url} after {duration:.2f}s: {e}")
-                    #await self.handle_fetch_failure(url, e)
+                    await self.handle_fetch_failure(url, current_depth, e)
                     return None
 
     async def process_response(self, url, response, current_depth):
