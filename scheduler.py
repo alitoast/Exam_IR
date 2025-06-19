@@ -23,16 +23,22 @@ import utils_async
 logger = logging.getLogger(__name__)
 
 class Scheduler:
-    def __init__(self, max_concurrency, num_spiders, max_depth):
-        self.frontier = asyncio.Queue()  # URLs to crawl
-        self.seen = set()  # tracks seen URLs
-        self.visited = set()  # tracks visited URLs
+    def __init__(self, max_concurrency, num_spiders, max_depth, max_pages_per_domain):
+        # initialize containers first
+        self.frontier = asyncio.Queue() # URLs to crawl
+        self.seen = set()               # tracks seen URLs
+        self.visited = set()            # tracks visited URLs
+
+        # initialize synchronization primitives
         self.semaphore = asyncio.Semaphore(max_concurrency)  # limits max parallel fetches
-        self.host_locks = {}  # ensures one fetch per host at a time
+        self.host_locks = {}                        # ensures one fetch per host at a time
+
+        # initialize tracking dictionaries
         self.retries = defaultdict(int)  # dictionary keeps count of how many times retried each URL
         self.domain_counts = defaultdict(int)   
-        self.max_pages_per_domain = 10  # prevent crawling too many pages from a single domain
-
+        
+        # store configuration parameters
+        self.max_pages_per_domain = max_pages_per_domain  # prevent crawling too many pages from a single domain
         self.max_concurrency = max_concurrency
         self.num_spiders = num_spiders
         self.max_depth = max_depth
