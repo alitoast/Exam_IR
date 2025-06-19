@@ -5,335 +5,227 @@ Web Parser Module
 
 Description:
 ------------
-This module provides functionality to analyze the content of web pages,
-extract relevant data (text, links), and clean or normalize it for further processing.
-It is typically used in conjunction with a web crawler or fetcher module.
+This module provides asynchronous tools for analyzing and extracting structured information 
+from web pages and sitemaps. Designed for integration with web crawlers or scrapers, it helps 
+normalize URLs, detect spider traps, parse sitemap files, and extract textual and hyperlink data 
+from HTML content.
 
-It includes:
-- Normalization of extracted URLs using RFC 3986 standards
-- Spider trap detection to avoid crawling problematic or infinite URLs
-- Sitemap parsing (both XML and HTML)
-- Extraction of links from page content (HTML parsing)
-- Extraction of visible text content from HTML structure (e.g. `<p>`, `<h1>`, etc.)
+Key Features:
+-------------
+- RFC 3986-compliant URL normalization
+- Heuristic spider trap detection (e.g., session IDs, calendar loops, deep paths)
+- Asynchronous sitemap parsing with support for:
+  - XML sitemaps (including nested <sitemapindex>)
+  - HTML sitemaps as fallback
+- Extraction and filtering of links from HTML (`href`, `src`)
+- Extraction of visible text content from relevant DOM elements
 
 Core Functions:
 ---------------
 
 1. **normalize_url(url)**:
-   - Normalizes a given URL using RFC 3986 (e.g., removes fragments, default ports, lowercases the host)
-   - Returns a cleaned URL string
+   - Cleans and standardizes a URL using the `rfc3986` library
+   - Returns a normalized URL string (or the original if normalization fails)
 
 2. **check_spider_traps(url)**:
-   - Applies heuristics to detect and block "spider traps" such as:
-     - Excessively long URLs
-     - Excessive path depth
-     - Suspicious query parameters (e.g., session IDs, pagination loops)
-   - Returns `False` if the URL is suspicious, otherwise `True`
+   - Applies heuristics to identify suspicious URLs (e.g., excessive length, deep paths, tracking params)
+   - Returns `True` if the URL appears safe to crawl; otherwise, `False`
 
-3. **parse_sitemap(sitemap_list)**:
-   - Parses a list of sitemap URLs (both XML and HTML)
-   - Handles recursive sitemap indexes
-   - Returns a DataFrame with URL, priority, and update frequency fields
-   - Normalizes and filters URLs to avoid traps
+3. **async fetch_sitemap(session, sitemap_url)**:
+   - Asynchronously downloads and parses a single sitemap (XML or HTML)
+   - Supports recursive parsing of nested sitemap indexes
+   - Returns a list of dictionary entries with keys: `url`, `priority`, and `update`
 
-4. **parse_page_url(html, sitemaps_urls, useragent)**:
-   - Parses an HTML page and extracts all candidate URLs (from `href` and `src`)
+4. **async parse_sitemap(sitemap_list)**:
+   - Parses multiple sitemaps concurrently using aiohttp and asyncio
+   - Normalizes and filters the collected URLs
+   - Returns a `pandas.DataFrame` with columns: `url`, `priority`, and `update`
+
+5. **parse_page_url(html, sitemaps_urls, useragent)**:
+   - Parses a web page's HTML content and extracts candidate URLs from `href` and `src` attributes
    - Filters out:
-     - URLs disallowed by `robots.txt`
      - Duplicates
-     - Already known sitemap URLs
+     - Disallowed paths (via `robots.txt` user-agent rules)
+     - Known sitemap URLs
      - Potential spider traps
-   - Returns a cleaned and filtered list of new URLs
+   - Returns a list of new URLs for crawling
 
-5. **parse_page_tags_all(html, tags_type=['p', 'article', 'section', 'li', 'h1', 'h2', 'h3'])**:
-   - Extracts visible textual content from an HTML page
-   - Collects text from the specified tags (in DOM order)
-   - Returns a list of clean, readable text blocks
+6. **parse_page_tags_all(html, tags_type=['p', 'article', 'section', 'li', 'h1', 'h2', 'h3'])**:
+   - Extracts visible textual content from HTML by selecting specified tag types
+   - Returns an ordered list of clean text segments for further NLP or indexing
 
 Dependencies:
 -------------
-- `re`                 : Regular expressions for pattern matching (trap detection)
-- `requests`           : HTTP requests (for sitemap retrieval)
-- `urllib.parse`       : URL decomposition and analysis
-- `xml.etree.ElementTree`: XML parsing for sitemap content
-- `bs4` (BeautifulSoup): HTML parsing for link and content extraction
-- `rfc3986`            : Standards-compliant URL normalization
-- `pandas`             : For structured sitemap output
+- `aiohttp`             : Asynchronous HTTP client for fetching sitemaps
+- `asyncio`             : Event loop for concurrent tasks
+- `re`                  : Regular expressions for trap detection
+- `urllib.parse`        : URL parsing and decomposition
+- `xml.etree.ElementTree`: Lightweight XML parsing
+- `bs4` (BeautifulSoup) : HTML parsing for content and link extraction
+- `rfc3986`             : Standards-compliant URL normalization
+- `pandas`              : DataFrame output for sitemap URLs
 
 Use Cases:
 ----------
-- Clean and validate link extraction for web crawling
-- Prevent crawling of problematic or infinite-loop URLs
-- Extract meaningful page content (for indexing or NLP)
-- Integrate with fetcher modules for full scraping pipelines
-
-Note:
------
-The `parse_sitemap()` function returns a DataFrame. You may want to save it or process it for link scheduling.
-Ensure that `fetch()` (from the fetcher module) is available in the context when calling parsing functions that fetch content.
+- Asynchronous sitemap processing for large-scale web crawling
+- Prevent infinite crawling or trap URLs via filtering
+- Structured extraction of content for indexing, search, or NLP
+- Integration with scraper pipelines, link schedulers, or site auditing tools
 
 """
 
 
-# Setup logging configuration
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    datefmt='%H:%M:%S'
-)
+class Parser:
+    def __init__(self):
+        self.logger = logging.getLogger(__name__)
 
-logger = logging.getLogger(__name__)
-
-
-
-def normalize_url(url):
-
-  '''
-    Input:
-        url (str): The URL to be normalized.
-
-    Output:
-        str: The normalized URL as a string. If normalization fails, the original URL is returned.
-
-    Description:
-        Normalizes the input URL according to the RFC 3986 standard and returns a string representation.
-        This function uses the `rfc3986` library to parse and normalize the URL according to the
-        URI standard defined in RFC 3986. This includes handling issues such as case normalization,
-        removing default ports, sorting query parameters (if applicable), and more.
-
-        If an error occurs during normalization (e.g., invalid input), it catches the exception
-        and returns the original URL as a fallback.
-  '''
-
-  try:
-      uri = rfc3986.uri_reference(url).normalize()
-      return uri.unsplit()
-
-  except Exception as e:
-      logger.error("Error, impossble to normalize %s: %s", url, e)
-      return url
-
-def check_spider_traps(url):
-
-  '''
-
-    Input:
-     url(str):The URL to be analyzed.
-
-    Output:
-      - Returns False if the URL is suspicious or considered a "spider trap."
-      - Returns True if the URL seems safe to crawl.
-
-    Description:
-      Checks whether a given URL is potentially harmful or could trap a web crawler
-      in infinite loops or unnecessary crawling paths.
-
-  '''
-
-  MAX_URL_LENGTH = 200   # Arbitrary maximum allowed URL length
-  MAX_PATH_DEPTH = 6     # Maximum allowed number of slashes in path
-  trap_pattern = re.compile(r"(calendar|sessionid|track|ref|sort|date=|page=\d{3,})", re.IGNORECASE)   # Pattern matching common signs of spider traps:
-                                                                                                       # calendars, session IDs, tracking params, endless pagination, etc.
-
-  link = urlparse(url)
-
-  # Check URL length
-  if len(link) > MAX_URL_LENGTH:
-     return False
-
-  # Check path depth (number of '/' in path)
-  if link.path.count('/') > MAX_PATH_DEPTH:
-     return False
-
-  # Check for suspicious patterns in the URL
-  if trap_pattern.search(url):
-     return False
-
-  return True
-
-def parse_sitemap(sitemap_list):
-
-    '''
-      Input:
-        sitemap_list (list): A list of sitemap URLs to parse.
-
-      Output:
-          Returns a DataFrame containing:
-         - URL
-         - Priority
-         - Update frequency
-
-      Description:
-         Supports both XML and HTML sitemaps. Handles nested sitemap indexes.
-         Returns a DataFrame with the parsed sitemap entries.
-
-    '''
-    namespace = {'ns': 'http://www.sitemaps.org/schemas/sitemap/0.9'}
-    all_entries = []
-
-    if not sitemap_list:
-        logger.warning("No sitemap available.")
-        return pd.DataFrame(columns=['url', 'priority', 'update'])
-
-    def parse_single_sitemap(sitemap_url):
+    def normalize_url(self, url):
         try:
-            response = requests.get(sitemap_url, timeout=10)
-            response.raise_for_status()
-        except requests.RequestException as e:
-            logger.error("Error, impossibile to fetch %s: %s", sitemap_url, e)
+            uri = rfc3986.uri_reference(url).normalize()
+            return uri.unsplit()
+        except Exception as e:
+            self.logger.error("Error normalizing %s: %s", url, e)
+            return url
+
+    def check_spider_traps(self, url):
+        MAX_URL_LENGTH = 200
+        MAX_PATH_DEPTH = 2
+        trap_pattern = re.compile(r"(calendar|sessionid|track|ref|sort|date=|page=\d{3,})", re.IGNORECASE)
+
+        link = urlparse(url)
+
+        if len(url) > MAX_URL_LENGTH:
+            return False
+        if link.path.count('/') > MAX_PATH_DEPTH:
+            return False
+        if trap_pattern.search(url):
+            return False
+        logging.info(f"{url} è sicuro")
+        return True
+
+    async def fetch_sitemap(self, session, sitemap_url):
+        try:
+            async with session.get(sitemap_url, timeout=10) as response:
+                if response.status != 200:
+                    self.logger.warning(f"Failed to fetch {sitemap_url} (Status {response.status})")
+                    return []
+
+                content_type = response.headers.get("Content-Type", "").lower()
+                content = await response.text()
+
+                # XML Sitemap
+                if "xml" in content_type:
+                    try:
+                        root = ET.fromstring(content.encode())
+                    except ET.ParseError as e:
+                        self.logger.error(f"XML parse error in {sitemap_url}: {e}")
+                        return []
+
+                    namespace = {'ns': 'http://www.sitemaps.org/schemas/sitemap/0.9'}
+
+                    if root.tag.endswith('index'):
+                        sub_sitemaps = [loc.text for loc in root.findall('ns:sitemap/ns:loc', namespace)]
+                        results = []
+                        for sub_url in sub_sitemaps:
+                            results.extend(await self.fetch_sitemap(session, sub_url))
+                        return results
+
+                    elif root.tag.endswith('urlset'):
+                        return [{
+                            'url': url.findtext('ns:loc', default='', namespaces=namespace),
+                            'priority': url.findtext('ns:priority', default=None, namespaces=namespace),
+                            'update': url.findtext('ns:changefreq', default=None, namespaces=namespace)
+                        } for url in root.findall('ns:url', namespace)]
+
+                # HTML Sitemap
+                elif "html" in content_type:
+                    soup = BeautifulSoup(content, "html.parser")
+                    return [{
+                        'url': self.normalize_url(a['href']),
+                        'priority': None,
+                        'update': None
+                    } for a in soup.find_all('a', href=True)]
+
+                else:
+                    self.logger.warning(f"Unsupported format: {sitemap_url} ({content_type})")
+                    return []
+
+        except aiohttp.ClientError as e:
+            self.logger.error(f"Error fetching {sitemap_url}: {e}")
             return []
 
-        content_type = response.headers.get("Content-Type", "").lower()
+    async def parse_sitemap(self, sitemap_list):
+        if not sitemap_list:
+            self.logger.warning("No sitemap available.")
+            return pd.DataFrame(columns=['url', 'priority', 'update'])
 
-        # Sitemap XML
-        if "xml" in content_type:
-            try:
-                root = ET.fromstring(response.content)
-            except ET.ParseError as e:
-                logger.error("Error into XML parsing %s: %s", sitemap_url, e)
-                return []
+        all_entries = []
+        async with aiohttp.ClientSession() as session:
+            tasks = [self.fetch_sitemap(session, url) for url in sitemap_list if url]
+            results = await asyncio.gather(*tasks)
 
-            # If it's a sitemap index, recursively parse child sitemaps
-            if root.tag.endswith('index'):
-                sitemap_urls = [loc.text for loc in root.findall('ns:sitemap/ns:loc', namespace)]
-                entries = []
-                for sub_url in sitemap_urls:
-                    entries.extend(parse_single_sitemap(sub_url))
-                return entries
+            for entries in results:
+                for entry in entries:
+                    url = self.normalize_url(entry['url'])
+                    if self.check_spider_traps(url):
+                        entry['url'] = url
+                        all_entries.append(entry)
 
-            #  # If it's a standard URL set
-            elif root.tag.endswith('urlset'):
-                return [{
-                    'url': url.findtext('ns:loc', default='', namespaces=namespace),
-                    'priority': url.findtext('ns:priority', default=None, namespaces=namespace),
-                    'update': url.findtext('ns:changefreq', default=None, namespaces=namespace)
-                } for url in root.findall('ns:url', namespace)]
+        print(f"sitemap urls{all_entries}")
+        return pd.DataFrame(all_entries, columns=['url', 'priority', 'update']).drop_duplicates()
 
-        # Handle HTML sitemaps (fallback)
-        elif "html" in content_type:
-            soup = BeautifulSoup(response.content, "html.parser")
-            return [{
-                'url': normalize_url(a['href']),
-                'priority': None,
-                'update': None
-            } for a in soup.find_all('a', href=True)]
+    def extract_links(self, html, base_url, sitemaps_urls=None, useragent=None):
+     """
+     Estrae URL da href/src in html, normalizza e converte in assoluti rispetto a base_url,
+     filtra contro spider traps e path disallow del useragent.
+     Torna la lista unita di URL vecchi + nuovi, senza duplicati.
+     """
+     if sitemaps_urls is None:
+        sitemaps_urls = []
 
-        else:
-            logger.warning("Format unknown %s (%s)", sitemap_url, content_type)
-            return []
+     soup = BeautifulSoup(html, "html.parser")
+     raw_urls = []
 
-    #  Process each sitemap URL in the list
-    for sitemap_url in sitemap_list:
-        if sitemap_url:
-            entries = parse_single_sitemap(sitemap_url)
-            for entry in entries:
-                url = normalize_url(entry['url']) #normalizzo l'url
-                if check_spider_traps(url): # provo a limitare le spider-trap
-                    entry['url'] = url
+     # Estrai href e src
+     for tag in soup.find_all(href=True):
+        raw_urls.append(tag['href'].strip())
+     for tag in soup.find_all(src=True):
+        raw_urls.append(tag['src'].strip())
 
-            all_entries.extend(entries)
+     # Converti in URL assoluti
+     absolute_urls = [urljoin(base_url, url) for url in raw_urls]
 
-    # Create a DataFrame and drop duplicates
-    df = pd.DataFrame(all_entries, columns=['url', 'priority', 'update']).drop_duplicates()
+     # Normalizza
+     normalized_urls = [self.normalize_url(url) for url in absolute_urls]
 
-    return df
+     # Filtra per robots.txt disallow
+     if useragent and hasattr(useragent, 'path_disallow'):
+        disallowed = useragent.path_disallow
+        normalized_urls = [
+            url for url in normalized_urls
+            if all(path not in url for path in disallowed)
+        ]
 
+     # Filtra spider traps
+     filtered_urls = [url for url in normalized_urls if self.check_spider_traps(url)]
 
-def parse_page_url(html,sitemaps_urls,useragent=default_agent):
+     # Unisci con sitemap_urls e rimuovi duplicati
+     all_urls = set(sitemaps_urls).union(filtered_urls)
 
-  '''
-     Inputs:
-     - html(str): The HTML content of the page.
-     - sitemaps_urls(str): A list of URLs already known from sitemaps.
-     - useragent(class): A user agent object containing disallowed paths (robots.txt rules).
+     return list(all_urls)
 
-     Output:
-     - A list of new, allowed URLs extracted from the page.
+    def parse_page_tags_all(self, html, tags_type=None):
+        if tags_type is None:
+            tags_type = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div', 'span', 'a']
 
-     Description:
-       Given an HTML page, this function extracts all URLs and filters them based on:
-       - Exclusion of private or disallowed directories (from robots.txt rules)
-       - Deduplication with URLs already found in the sitemap
-       - Optional normalization and trap filtering
+        soup = BeautifulSoup(html, "html.parser")
 
-  '''
+        for tag in soup(['script', 'style', 'footer', 'nav', 'noscript', 'header', 'form', 'aside']):
+            tag.decompose()
 
-  # Parse HTML content
-  soup = BeautifulSoup(html, 'html.parser')
+        for comment in soup.find_all(string=lambda text: isinstance(text, Comment)):
+            comment.extract()
 
-  urls = []
-  # Extract URLs from href attributes (e.g., <a>, <link>, etc.)
-  for tag in soup.find_all(href=True):
-      urls.append(tag['href'])
-
-  # Extract URLs from src attributes (e.g., <img>, <script>, etc.)
-  for tag in soup.find_all(src=True):
-      urls.append(tag['src'])
-
-  # Filter out disallowed URLs based on robots.txt rules
-  if useragent.path_disallow != None:
-    for url in urls:
-      for path in useragent.path_disallow:
-        if path in url:
-         urls.remove(url)
-
-  # Normalize URLs (e.g., remove fragments, resolve relative paths, etc.)
-    urls = [normalize_url(url) for url in urls]
-
-  # Remove duplicate URLs
-    urls = list(set(urls))
-
-  # Filter out potential spider traps
-    urls = [url for url in urls if check_spider_traps(url)]
-
-  # Filter out URLs that are already in the sitemap
-  if sitemaps_urls != None:
-    def_urls = sitemaps_urls
-    for url in urls:
-      if url not in def_urls:
-         def_urls.append(url)
-  else:
-    def_urls = urls
-
-  return def_urls
-
-
-def parse_page_tags_all(html,tags_type = None):
-
-  '''
-    Inputs:
-    - html: The HTML content as a string.
-    - tags_type: A list of tag names to search for (default includes common content tags).
-
-    Output:
-    - A list of text strings extracted from the specified tags, preserving DOM order
-
-    Description:
-      Parses the given HTML content and extracts text from specified HTML tags.
-
-  '''
-  if tags_type == None:
-     tags_type = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div', 'span', 'a']
-
-  # Initialize the HTML parser
-  soup = BeautifulSoup(html, "html.parser")
-
-  # Find tag to remove
-  for tag in soup(['script','style','footer','nav','noscript','header','form','aside']):
-      tag.decompose()
-
-  # Find all comments and removes them
-  for comment in soup.find_all(string=lambda text: isinstance(text,comment)):
-      comment.extract()
-
-  # Find all tags of the specified types (respects DOM order)
-  tags = soup.find_all(tags_type) 
-
-  # Extract clean text from each tag (removing whitespace and combining with spaces)
-  texts = [tag.get_text(separator=' ', strip=True) for tag in tags]
-
-  return texts
-
-
-
-
+        tags = soup.find_all(tags_type)
+        print(f"sono state trovate {len(tags)} parole")
+        return [tag.get_text(separator=' ', strip=True) for tag in tags]
