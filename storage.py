@@ -102,12 +102,12 @@ class Storage:
     def __init__(self, pages_file="data/pages.json", index_file="data/inverted_index.json"):
         self.pages_file = pages_file
         self.index_file = index_file
+        os.makedirs(os.path.dirname(self.pages_file), exist_ok=True)  # create data directory if it doesn't exist
         self.pages = {}
         self.inverted_index = {}
         self.dirty = False 
         self._lock = asyncio.Lock()
 
-        os.makedirs(os.path.dirname(self.pages_file), exist_ok=True)
 
     async def async_init(self): 
         self.pages = await self._load_json_async(self.pages_file) or {}
