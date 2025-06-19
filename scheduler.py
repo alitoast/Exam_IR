@@ -197,6 +197,8 @@ class Scheduler:
         if not seeds:
             seeds = ["https://example.com"]
 
+        await self.storage.async_init()
+
         async with self.fetcher:  # manages aiohttp session
             await self.seed_urls(seeds)
             spiders = [asyncio.create_task(self.spider()) for _ in range(self.num_spiders)]
@@ -206,6 +208,9 @@ class Scheduler:
                 s.cancel()  # cancel all spiders after done so it doesn't run forever
 
             await asyncio.gather(*spiders, return_exceptions=True)
+
+            await self.storage.commit()
+
             logger.info("Crawling finished.")
             logger.info(f"Total seen URLs: {len(self.seen)}")
             logger.info(f"Total successfully visited URLs: {len(self.visited)}")
