@@ -28,15 +28,6 @@ from utils_async import calculate_page_type, compute_fingerprint, preprocess, to
 
 parser = Parser() 
 
-# logging set up
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s", # timestamp, level, message
-    datefmt="%H:%M:%S",
-    filename="crawler_storage.log",  # log file
-    filemode="a"  # append to the log file ('w' to overwrite)
-)
-
 logger = logging.getLogger(__name__)
 
 

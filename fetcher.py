@@ -82,6 +82,7 @@ import logging
 import asyncio
 import aiohttp
 
+logger = logging.getLogger(__name__)
 
 #url di prova
 # ha sitemap-index ma non priority etc.
