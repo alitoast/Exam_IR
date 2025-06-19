@@ -30,7 +30,7 @@ class Parser:
 
     def check_spider_traps(self, url):
         MAX_URL_LENGTH = 200
-        MAX_PATH_DEPTH = 6
+        MAX_PATH_DEPTH = 2
         trap_pattern = re.compile(r"(calendar|sessionid|track|ref|sort|date=|page=\d{3,})", re.IGNORECASE)
 
         parsed = urlparse(url)

@@ -6,6 +6,8 @@ from urllib.parse import urlparse
 import urllib.robotparser
 import rfc3986
 
+logger = logging.getLogger(__name__)
+
 # questo funziona
 class UserAgentPolicy:
     def __init__(self, name, header):
