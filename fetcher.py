@@ -67,14 +67,13 @@ To use this module, install the required packages:
 """
 
 
-pip install rfc3986
+#pip install rfc3986
 
 import pandas as pd
 import re
 from urllib.parse import urlparse
 import urllib.robotparser #per gestire il file robot.txt
 import xml.etree.ElementTree as ET  #per gestire i file xml
-import requests #per http
 import time #per gestire il tempo
 from bs4 import BeautifulSoup #per gestire il parsing del html (si può usare anche per xml)
 import rfc3986 # per la normalizzazione degli urls
