@@ -93,6 +93,7 @@ class Storage:
         """
         self.pages_file = pages_file
         self.index_file = index_file
+        os.makedirs(os.path.dirname(pages_file), exist_ok=True)  # create data directory if it doesn't exist
         self.pages = {}
         self.inverted_index = {}
         self.dirty = False 
