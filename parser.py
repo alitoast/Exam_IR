@@ -73,7 +73,17 @@ Use Cases:
 - Integration with scraper pipelines, link schedulers, or site auditing tools
 
 """
-
+import pandas as pd
+import re
+from urllib.parse import urlparse
+import urllib.robotparser #per gestire il file robot.txt
+import xml.etree.ElementTree as ET  #per gestire i file xml
+import time #per gestire il tempo
+from bs4 import BeautifulSoup #per gestire il parsing del html (si può usare anche per xml)
+import rfc3986 # per la normalizzazione degli urls
+import logging
+import asyncio
+import aiohttp
 
 class Parser:
     def __init__(self):
