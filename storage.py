@@ -107,6 +107,8 @@ class Storage:
         self.dirty = False 
         self._lock = asyncio.Lock()
 
+        os.makedirs(os.path.dirname(self.pages_file), exist_ok=True)
+
     async def async_init(self): 
         self.pages = await self._load_json_async(self.pages_file) or {}
         self.inverted_index = await self._load_json_async(self.index_file) or {}
