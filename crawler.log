@@ -639,3 +639,105 @@ NameError: name 'aiohttp' is not defined
 09:48:59 [INFO] Crawling finished.
 09:48:59 [INFO] Total seen URLs: 2
 09:48:59 [INFO] Total successfully visited URLs: 0
+10:01:24 [INFO] Added URL to frontier: https://example.com
+10:01:24 [INFO] Added URL to frontier: https://news.ycombinator.com
+10:01:24 [INFO] Got URL from frontier: https://example.com
+10:01:24 [INFO] Fetching https://example.com
+10:01:25 [ERROR] Fetch failed for https://example.com after 0.84s: 'NoneType' object is not iterable
+10:01:25 [ERROR] Fetch failed for https://example.com: 'NoneType' object is not iterable
+10:01:25 [INFO] Re-queuing https://example.com (attempt 1)
+10:01:25 [WARNING] Empty response for https://example.com
+10:01:25 [INFO] Task done. Frontier size: 2
+10:01:25 [INFO] Got URL from frontier: https://news.ycombinator.com
+10:01:25 [INFO] Fetching https://news.ycombinator.com
+10:01:26 [ERROR] Fetch failed for https://news.ycombinator.com after 0.84s: 'NoneType' object is not iterable
+10:01:26 [ERROR] Fetch failed for https://news.ycombinator.com: 'NoneType' object is not iterable
+10:01:26 [INFO] Re-queuing https://news.ycombinator.com (attempt 1)
+10:01:26 [WARNING] Empty response for https://news.ycombinator.com
+10:01:26 [INFO] Task done. Frontier size: 2
+10:01:26 [INFO] Got URL from frontier: https://example.com
+10:01:26 [INFO] Fetching https://example.com
+10:01:26 [ERROR] Fetch failed for https://example.com after 0.00s: 'NoneType' object is not iterable
+10:01:26 [ERROR] Fetch failed for https://example.com: 'NoneType' object is not iterable
+10:01:26 [INFO] Re-queuing https://example.com (attempt 2)
+10:01:26 [WARNING] Empty response for https://example.com
+10:01:26 [INFO] Task done. Frontier size: 2
+10:01:26 [INFO] Got URL from frontier: https://news.ycombinator.com
+10:01:26 [INFO] Fetching https://news.ycombinator.com
+10:01:26 [ERROR] Fetch failed for https://news.ycombinator.com after 0.00s: 'NoneType' object is not iterable
+10:01:26 [ERROR] Fetch failed for https://news.ycombinator.com: 'NoneType' object is not iterable
+10:01:26 [INFO] Re-queuing https://news.ycombinator.com (attempt 2)
+10:01:26 [WARNING] Empty response for https://news.ycombinator.com
+10:01:26 [INFO] Task done. Frontier size: 2
+10:01:26 [INFO] Got URL from frontier: https://example.com
+10:01:26 [INFO] Fetching https://example.com
+10:01:26 [ERROR] Fetch failed for https://example.com after 0.00s: 'NoneType' object is not iterable
+10:01:26 [ERROR] Fetch failed for https://example.com: 'NoneType' object is not iterable
+10:01:26 [INFO] Giving up on https://example.com after 3 attempts.
+10:01:26 [WARNING] Empty response for https://example.com
+10:01:26 [INFO] Task done. Frontier size: 1
+10:01:26 [INFO] Got URL from frontier: https://news.ycombinator.com
+10:01:26 [INFO] Fetching https://news.ycombinator.com
+10:01:26 [ERROR] Fetch failed for https://news.ycombinator.com after 0.00s: 'NoneType' object is not iterable
+10:01:26 [ERROR] Fetch failed for https://news.ycombinator.com: 'NoneType' object is not iterable
+10:01:26 [INFO] Giving up on https://news.ycombinator.com after 3 attempts.
+10:01:26 [WARNING] Empty response for https://news.ycombinator.com
+10:01:26 [INFO] Task done. Frontier size: 0
+10:01:26 [INFO] Crawling finished.
+10:01:26 [INFO] Total seen URLs: 2
+10:01:26 [INFO] Total successfully visited URLs: 0
+10:25:14 [DEBUG] Using selector: EpollSelector
+10:25:14 [INFO] Added URL to frontier: https://example.com
+10:25:14 [INFO] Added URL to frontier: https://news.ycombinator.com
+10:25:14 [INFO] Got URL from frontier: https://example.com
+10:25:14 [INFO] Fetching https://example.com
+10:25:14 [DEBUG] Fetching URL: https://example.com
+10:26:33 [ERROR] Fetch failed for https://example.com after 79.24s: 'NoneType' object is not iterable
+10:26:33 [ERROR] Fetch failed for https://example.com: 'NoneType' object is not iterable
+10:26:33 [INFO] Re-queuing https://example.com (attempt 1)
+10:26:33 [INFO] Task done. Frontier size: 2
+10:26:33 [INFO] Got URL from frontier: https://news.ycombinator.com
+10:26:33 [INFO] Fetching https://news.ycombinator.com
+10:26:33 [DEBUG] Fetching URL: https://news.ycombinator.com
+10:26:34 [ERROR] Fetch failed for https://news.ycombinator.com after 1.02s: 'NoneType' object is not iterable
+10:26:34 [ERROR] Fetch failed for https://news.ycombinator.com: 'NoneType' object is not iterable
+10:26:34 [INFO] Re-queuing https://news.ycombinator.com (attempt 1)
+10:26:34 [INFO] Task done. Frontier size: 2
+10:26:34 [INFO] Got URL from frontier: https://example.com
+10:26:34 [INFO] Fetching https://example.com
+10:26:34 [DEBUG] Fetching URL: https://example.com
+10:26:34 [ERROR] Fetch failed for https://example.com after 0.00s: 'NoneType' object is not iterable
+10:26:34 [ERROR] Fetch failed for https://example.com: 'NoneType' object is not iterable
+10:26:34 [INFO] Re-queuing https://example.com (attempt 2)
+10:26:34 [INFO] Task done. Frontier size: 2
+10:26:34 [INFO] Got URL from frontier: https://news.ycombinator.com
+10:26:34 [INFO] Fetching https://news.ycombinator.com
+10:26:34 [DEBUG] Fetching URL: https://news.ycombinator.com
+10:26:34 [ERROR] Fetch failed for https://news.ycombinator.com after 0.00s: 'NoneType' object is not iterable
+10:26:34 [ERROR] Fetch failed for https://news.ycombinator.com: 'NoneType' object is not iterable
+10:26:34 [INFO] Re-queuing https://news.ycombinator.com (attempt 2)
+10:26:34 [INFO] Task done. Frontier size: 2
+10:26:34 [INFO] Got URL from frontier: https://example.com
+10:26:34 [INFO] Fetching https://example.com
+10:26:34 [DEBUG] Fetching URL: https://example.com
+10:26:34 [ERROR] Fetch failed for https://example.com after 0.00s: 'NoneType' object is not iterable
+10:26:34 [ERROR] Fetch failed for https://example.com: 'NoneType' object is not iterable
+10:26:34 [INFO] Giving up on https://example.com after 3 attempts.
+10:26:34 [INFO] Task done. Frontier size: 1
+10:26:34 [INFO] Got URL from frontier: https://news.ycombinator.com
+10:26:34 [INFO] Fetching https://news.ycombinator.com
+10:26:34 [DEBUG] Fetching URL: https://news.ycombinator.com
+10:26:34 [ERROR] Fetch failed for https://news.ycombinator.com after 0.00s: 'NoneType' object is not iterable
+10:26:34 [ERROR] Fetch failed for https://news.ycombinator.com: 'NoneType' object is not iterable
+10:26:34 [INFO] Giving up on https://news.ycombinator.com after 3 attempts.
+10:26:34 [INFO] Task done. Frontier size: 0
+10:26:34 [INFO] Crawling finished.
+10:26:34 [INFO] Total seen URLs: 2
+10:26:34 [INFO] Total successfully visited URLs: 0
+10:52:53 [DEBUG] Using selector: EpollSelector
+11:19:44 [DEBUG] Using selector: EpollSelector
+11:24:20 [DEBUG] Using selector: EpollSelector
+11:28:22 [DEBUG] Using selector: EpollSelector
+11:29:10 [DEBUG] Using selector: EpollSelector
+11:34:53 [DEBUG] Using selector: EpollSelector
+11:35:37 [DEBUG] Using selector: EpollSelector

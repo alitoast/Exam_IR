@@ -24,7 +24,7 @@ import utils_async
 logger = logging.getLogger(__name__)
 
 class Scheduler:
-    def __init__(self, max_concurrency, num_spiders):
+    def __init__(self, max_concurrency, num_spiders, storage):
         self.frontier = asyncio.Queue() # URLs to crawl
         self.seen = set()   # tracks seen URLs
         self.visited = set()    # tracks visited URLs 
@@ -183,7 +183,7 @@ class Scheduler:
         while True:
             url = await self.get_url()
             try:
-                response = await self.fetch_url(url)
+                response = await self.fetcher.fetch(url)
                 if response:
                     await self.process_response(url, response)
             except Exception as e:
@@ -201,8 +201,9 @@ class Scheduler:
         if not seeds:
             seeds = ["https://example.com"]
 
-        await self.fetcher.start() # manages aiohttp session  EXPLICIT OPEN
-        try:
+        async with aiohttp.ClientSession() as session:
+            self.fetcher = Fetcher(session)  # create Fetcher *after* session
+        
             await self.seed_urls(seeds)
             spiders = [asyncio.create_task(self.spider()) for _ in range(self.num_spiders)]
 
@@ -211,8 +212,8 @@ class Scheduler:
             for s in spiders:
                 s.cancel()  # stop all spiders after done so it doesn't run forever
             await asyncio.gather(*spiders, return_exceptions=True)
-        finally:
-            await self.fetcher.finish(None, None, None)  # EXPLICIT CLOSE
+
+            #await self.fetcher.finish(None, None, None)  #  CLOSE not needed?
 
             logger.info("Crawling finished.")
             logger.info(f"Total seen URLs: {len(self.seen)}")
