@@ -1,0 +1,17 @@
+
+ELENCO MODIFICHE:
+
+	SCHEDULER:
+	- run : ho inserito il check_robots su i domini e h sostituito la chiusura 
+		drastica delle task degli spiders con ---> asyncio.gather(*spiders, 			return_exceptions=True) altrimenti mi chiudeva la connessione e le
+		connessioni prima che la queque fossero libere
+	- spider : ho inserito un TimeoutError per gestire gli url
+	- class.running : attiva o meno gli spider, è di controllo dovrebbe funzionare
+	  tutto anche senza
+	
+	FETCHER:
+	- fetch : ho inserito un altro timer ma forse si può togliere che mi
+		  sa che è un duplicato di fetch_url nello scheduler
+		  h inserito un check sul tipo di contenuto preso
+
+	- 
