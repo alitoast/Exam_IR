@@ -46,8 +46,6 @@ Dependencies:
 - `time`               : For high-resolution timing (`monotonic_ns`)
 - `bs4` (BeautifulSoup): For parsing HTML/XML (optional, for downstream processing)
 - `rfc3986`            : For URL validation and normalization
-- `re`                 : For regular expressions (if needed)
-- `pandas`             : Optional data handling
 - `xml.etree.ElementTree`: XML parsing (e.g., for sitemap processing)
 - `logging`            : For tracking behavior and debugging
 
@@ -66,30 +64,17 @@ To use this module, install the required packages:
 
 """
 
-
-#pip install rfc3986
-
-import pandas as pd
-import re
 from urllib.parse import urlparse
-import urllib.robotparser #per gestire il file robot.txt
-import xml.etree.ElementTree as ET  #per gestire i file xml
-import time #per gestire il tempo
-from bs4 import BeautifulSoup #per gestire il parsing del html (si può usare anche per xml)
-import rfc3986 # per la normalizzazione degli urls
+import urllib.robotparser 
+import xml.etree.ElementTree as ET 
+import time 
+from bs4 import BeautifulSoup
+import rfc3986
 import logging
 import asyncio
 import aiohttp
 
 logger = logging.getLogger(__name__)
-
-#url di prova
-# ha sitemap-index ma non priority etc.
-start_url_uno = "https://www.dragopublisher.com/it/"
-# non ha sitemap
-start_url_due = "https://www.wildraccoon.it/shop/"
-# sito con sitemap
-start_url = "https://www.bbc.com/"
 
 
 class UserAgentPolicy:
@@ -143,25 +128,45 @@ class Fetcher:
         return self.default_agent
         
     async def check_robots(self, url, useragent=None):
+        """
+        Asynchronously fetches and parses the robots.txt file for a given URL.
+        Extracts crawling policies (disallowed paths, crawl-delay, request-rate, sitemaps)
+        and stores them in the specified UserAgentPolicy object.
+
+        Args:
+            url (str): The base URL of the target website.
+            useragent (UserAgentPolicy, optional): A user agent policy object. If not provided,
+                                               the default user agent is used.
+
+        Returns:
+            list or None: A list of sitemap URLs if declared in robots.txt, otherwise None.
+        """
+        # Use the default user agent if none is provided
         if not useragent:
             useragent = self.default_agent
+        # Set base URL for tracking and generate the robots.txt URL    
         useragent.base_url = url
         new_url = url.rstrip("/") + "/robots.txt"
 
+        # Create a new RobotFileParser object for parsing robots.txt content
         rfl = urllib.robotparser.RobotFileParser()
         try:
+            # Send asynchronous GET request to fetch robots.txt
             async with self.session.get(new_url, timeout=10) as response:
                 if response.status == 200:
+                    # Read and parse the robots.txt content
                     robots_txt = await response.text()
                     rfl.parse(robots_txt.splitlines())
                     logging.info(f"Fetched robots.txt: {new_url}")
                 else:
+                    # Log if the file was not retrieved successfully
                     logging.warning(f"Failed to fetch robots.txt: HTTP {response.status}")
                     return None
+        # Handle connection errors (e.g., DNS issues, timeouts)            
         except aiohttp.ClientError as e:
             logging.error(f"Error fetching robots.txt: {e}")
             return None
-
+        # Extract rules and store them in the user agent policy
         useragent.path_disallow = rfl.parse("Disallow")
         useragent.crawl_delay = rfl.crawl_delay(useragent.name)
         useragent.request_rate = rfl.request_rate(useragent.name)
@@ -169,65 +174,103 @@ class Fetcher:
         return rfl.site_maps()
 
     async def check_time(self, useragent):
+            """
+             Enforces a delay between consecutive requests made by a given user agent,
+             in accordance with robots.txt rules (crawl-delay or request-rate).
+             Prevents overwhelming the target server by spacing out requests properly.
+
+             Args:
+                useragent (UserAgentPolicy): The user agent making the request.
+            """
+            # If both crawl-delay and request-rate are defined, use the larger delay
             if useragent.request_rate and useragent.crawl_delay:
                 request_delay = (useragent.request_rate[1] * 1e9) / useragent.request_rate[0]
                 crawl_delay = useragent.crawl_delay * 1e9
                 delay = max(request_delay, crawl_delay)
+            # Only crawl-delay is defined    
             elif useragent.crawl_delay:
                 delay = useragent.crawl_delay * 1e9
+            # Only request-rate is defined
             elif useragent.request_rate:
                 delay = (useragent.request_rate[1] * 1e9) / useragent.request_rate[0]
+            # No delay info found — use a reasonable default (1.5s)    
             else:
                 delay = 1.5 * 1e9  # default delay
             logging.info(f"Delay: {delay / 1e9} seconds")
+            # Calculate how much time to wait based on the last access time
             now = time.monotonic_ns()
             wait = max(0, (useragent.last_access + delay) - now)
+            # If a wait is needed, sleep asynchronously
             if wait > 0:
                 await asyncio.sleep(wait / 1e9)
             useragent.last_access = time.monotonic_ns()
             logging.info(f"{useragent.name} Last access: {useragent.last_access / 1e9} seconds")
 
     async def fetch(self, url, useragent=None):
+      """
+        Asynchronously fetches the content of a given URL using the specified user agent.
+
+        The function respects crawling policies such as crawl-delay and request-rate,
+        prevents duplicate requests, and logs timing and error information.
+
+        Args:
+            url (str): The target URL to fetch.
+            useragent (UserAgentPolicy, optional): The user agent policy to use for this request.
+                                               If not provided, the default agent is used.
+
+        Returns:
+            Tuple[str, str, int] or None:
+                - HTML content of the fetched page (str)
+                - Final URL after redirections (str)
+                - HTTP status code (int)
+                Returns None if the page is already visited or if an error occurs.
+      """
+      # Use default user agent if none is provided
       if not useragent:
           useragent = self.default_agent
 
+      # Avoid re-fetching URLs already visited by this user agent
       if url in useragent.visited:
           logging.warning(f"[{useragent.name}] Page already visited: {url}")
           return None
-
+      
+      # Respect timing policies (e.g., crawl-delay or request-rate)
       await self.check_time(useragent)
 
       headers = {'User-Agent': useragent.header}
 
       start_time = time.perf_counter()
       try:
+          # Perform asynchronous HTTP GET request with timeout
           async with self.session.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=20)) as response:
               duration = time.perf_counter() - start_time
 
               if response.status == 200:
-                  #content_type = response.headers.get('Content-Type', '').lower()
-                  #if 'text/html' in content_type:
                       html = await response.text()
                       logging.info(f"[{useragent.name}] Fetched HTML page: {url} in {duration:.2f}s")
                       print(f"[{useragent.name}] Fetched HTML page: {url} in {duration:.2f}s")
+                      # Mark URL as visited
                       useragent.visited.add(url)
                       return (html, str(response.url), response.status)
-                  #else:
-                      #logging.warning(f"[{useragent.name}] Skipping non-HTML content: {url} (Content-Type: {content_type})")
-                      #return None
               else:
+                  # Log and report non-200 status responses
                   logging.warning(f"[{useragent.name}] Failed to fetch {url}: HTTP {response.status} in {duration:.2f}s")
                   print(f"[{useragent.name}] Failed to fetch {url}: HTTP {response.status} in {duration:.2f}s")
                   return None
-
+      
+      # Handle timeout errors
       except asyncio.TimeoutError:
           duration = time.perf_counter() - start_time
           logging.error(f"[{useragent.name}] Timeout after {duration:.2f}s fetching {url}")
           return None
+
+      # Handle network-related client errors    
       except aiohttp.ClientError as e:
           duration = time.perf_counter() - start_time
           logging.error(f"[{useragent.name}] Client error fetching {url} after {duration:.2f}s: {e}")
           return None
+
+      # Handle any other unexpected errors    
       except Exception as e:
           duration = time.perf_counter() - start_time
           logging.error(f"[{useragent.name}] Unexpected error fetching {url} after {duration:.2f}s: {e}")
