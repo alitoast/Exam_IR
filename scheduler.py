@@ -198,7 +198,6 @@ class Scheduler:
                     return None
                 except aiohttp.client_exceptions.InvalidURL as e:
                     logger.error(f"Invalid URL for {url}: {e}")
-                    await self.handle_fetch_failure(url, current_depth, e)
                     return None
                 except Exception as e:
                     duration = time.perf_counter() - start_time
