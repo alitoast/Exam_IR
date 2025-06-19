@@ -60,9 +60,6 @@ pip install rfc3986 pandas aiohttp beautifulsoup4
 
 ---
 
-Let me know if you'd prefer this as a `requirements.txt` format or want to add optional/development dependencies too.
-
-
 2. **Run the crawler**:
 
    ```bash
