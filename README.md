@@ -48,14 +48,13 @@ This project implements a **web crawler** in Python as part of the UniTs *Inform
 The following Python packages are required:
 
 * `rfc3986`
-* `pandas`
 * `aiohttp`
 * `beautifulsoup4`
 
 You can install them using:
 
 ```bash
-pip install rfc3986 pandas aiohttp beautifulsoup4
+pip install rfc3986 aiohttp beautifulsoup4
 ```
 
 ---
