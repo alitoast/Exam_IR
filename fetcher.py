@@ -108,13 +108,15 @@ class Fetcher:
         """Main async fetch method that respects robots.txt and rate limits."""
         url = self.normalize_url(url)
 
+        logger.debug(f"Fetching URL: {url}")
+
         if url in self.visited:
             logger.info(f"Already visited: {url}")
-            return None
+            return "", url, None
 
         if not self.is_allowed(url):
             logger.warning(f"Blocked by robots.txt: {url}")
-            return None
+            return "", url, None
 
         await self.wait_if_needed(url)
 
@@ -123,6 +125,9 @@ class Fetcher:
             async with self.session.get(url, headers=headers, timeout=10) as response:
                 status = response.status
                 final_url = str(response.url)
+                
+                logger.debug(f"Response status for {url}: {status}")
+
                 if status == 200:
                     html = await response.text()
                     logger.info(f"Fetched {final_url} (status {status})")
@@ -130,7 +135,10 @@ class Fetcher:
                     return (html, final_url, status)
                 else:
                     logger.warning(f"Failed to fetch {final_url} (status {status})")
-                    return (None, final_url, status)
+                    return ("", final_url, status)
         except aiohttp.ClientError as e:
             logger.error(f"Client error while fetching {url}: {e}")
-            raise
+            return "", url, None
+        except Exception as e:
+            logger.error(f"Unexpected error while fetching {url}: {e}")
+            return (None, url, None)
