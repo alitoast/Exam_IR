@@ -6,14 +6,6 @@ from urllib.parse import urlparse
 import urllib.robotparser
 import rfc3986
 
-# Logging setup
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    datefmt='%H:%M:%S',
-    filename="crawler.log",  # log file
-    filemode="a"  # append to the log file ('w' to overwrite)
-)
 logger = logging.getLogger(__name__)
 
 # User agent headers
@@ -38,16 +30,17 @@ class Fetcher:
         self.sitemaps = {}
         self.session = None
 
-    async def __aenter__(self):
+    async def start(self):
         self.session = aiohttp.ClientSession()
         return self
 
-    async def __aexit__(self, *args):
+    async def finish(self, *args):
         await self.session.close()
 
     def normalize_url(self, url):
         """Normalize URL using rfc3986."""
-        return str(rfc3986.uri_reference(url).normalize())
+        ref = rfc3986.uri_reference(url).normalize()
+        return ref.unsplit()
 
     def get_hostname(self, url):
         return urlparse(url).netloc
