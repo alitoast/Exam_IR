@@ -120,3 +120,19 @@ class Fetcher:
           duration = time.perf_counter() - start_time
           logging.error(f"[{useragent.name}] Unexpected error fetching {url} after {duration:.2f}s: {e}")
           return None
+
+
+
+useragent_dict = {
+    "Googlebot": UserAgentPolicy("Googlebot",'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)'),
+
+    "Bingbot": UserAgentPolicy("Bingbot",'Mozilla/5.0 (compatible; Bingbot/2.0; +http://www.bing.com/bingbot.htm)'),
+
+    "Slurp": UserAgentPolicy("Slurp",'Mozilla/5.0 (compatible; Yahoo! Slurp; http://help.yahoo.com/help/us/ysearch/slurp)'),
+
+    "DuckDuckbot": UserAgentPolicy("DuckDuckbot",'DuckDuckBot/1.0; (+http://duckduckgo.com/duckduckbot.html)'),
+
+    "Yandex": UserAgentPolicy("Yandex", 'Mozilla/5.0 (compatible; YandexBot/3.0; +http://yandex.com/bots)'),
+
+    "*": UserAgentPolicy("*",'Mozilla/5.0 (compatible; MyBot/1.0; +http://example.com/bot)')
+}

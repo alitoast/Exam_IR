@@ -1,42 +1,22 @@
 # main.py
 
 import asyncio
-import nltk
-from storage import Storage
 from scheduler import Scheduler
 from config import setup_logging
-import utils_async
 import logging
 
 setup_logging()
 logger = logging.getLogger(__name__)
 
 async def main():
-    # Download necessary NLTK data
-    nltk.download('punkt_tab', quiet=True)
-    nltk.download('averaged_perceptron_tagger_eng', quiet=True)
+    logging.info("Starting scheduler...")
+    max_concurrency = 5
+    num_spiders = 3
+    scheduler = Scheduler(max_concurrency, num_spiders)
 
-    # Initialize components
-    storage = Storage()
-    scheduler = Scheduler(max_concurrency=10, num_spiders=5, storage=storage)
-
-    # Optionally: add initial seed URLs
-    seed_urls = [
-        "https://example.com",
-        "https://news.ycombinator.com"
-    ]
-    await scheduler.seed_urls(seed_urls)
-
-    # Start the crawling process
-    try:
-        await scheduler.run(seed_urls)
-    except KeyboardInterrupt:
-        print("Interrupted by user.")
-    except Exception as e:
-        logger.error(f"An error occurred: {e}")
-    finally:
-        # Commit storage before exit
-        await storage.commit()
+    logging.info("Running scheduler with seeds.")
+    await scheduler.run(seeds=["https://example.com/"])
+    logging.info("Scheduler finished.")
 
 if __name__ == "__main__":
     asyncio.run(main())

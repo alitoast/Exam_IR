@@ -20,11 +20,10 @@ from parser import Parser
 from storage import Storage 
 import utils_async
 
-
 logger = logging.getLogger(__name__)
 
 class Scheduler:
-    def __init__(self, max_concurrency, num_spiders, storage):
+    def __init__(self, max_concurrency, num_spiders):
         self.frontier = asyncio.Queue() # URLs to crawl
         self.seen = set()   # tracks seen URLs
         self.visited = set()    # tracks visited URLs 
@@ -35,9 +34,9 @@ class Scheduler:
         self.max_concurrency = max_concurrency
         self.num_spiders = num_spiders
 
-        self.fetcher = Fetcher()
+        self.fetcher = Fetcher(None)
         self.parser = Parser()
-        self.storage = Storage ()
+        self.storage = Storage()
  
     async def add_url(self, url):
         """
@@ -135,9 +134,9 @@ class Scheduler:
             logger.warning(f"Empty response for {url}")
             return
         
-        if response is None:
-            logger.warning(f"Empty response for {url}")
-            return
+        #if response is None:
+        #    logger.warning(f"Empty response for {url}")
+        #    return
 
         try:
             content, final_url, status = response
@@ -169,7 +168,7 @@ class Scheduler:
         self.visited.add(final_url)
 
         try:
-            # Extract and enqueue links found in the page
+            # extract and enqueue links found in the page
             links = self.parser.extract_links(content, final_url)
             for link in links:
                 await self.add_url(link)
@@ -180,16 +179,16 @@ class Scheduler:
         """
         Spider that pulls a URL, fetches it, parses it, and queues new links.
         """
-        while True:
-            url = await self.get_url()
+        while self.running:
             try:
-                response = await self.fetcher.fetch(url)
-                if response:
-                    await self.process_response(url, response)
-            except Exception as e:
-                logger.error(f"Unhandled exception while processing {url}: {e}")
-            finally:
-                self.task_done()
+                url = await asyncio.wait_for(self.get_url(), timeout=5)
+            except asyncio.TimeoutError:
+                # if no URL for 5 seconds, exit loop
+                break
+
+            response = await self.fetcher.fetch(url)
+            await self.process_response(url, response)
+            self.task_done()
 
     async def run(self, seeds=None):
         """
@@ -200,20 +199,27 @@ class Scheduler:
         """
         if not seeds:
             seeds = ["https://example.com"]
+        
+        await self.storage.async_init()
+        await self.seed_urls(seeds) # add seeds to frontier
 
         async with aiohttp.ClientSession() as session:
             self.fetcher = Fetcher(session)  # create Fetcher *after* session
         
-            await self.seed_urls(seeds)
+            unique_hosts = {urlparse(url).netloc for url in seeds}
+            for host in unique_hosts:
+                site_url = f"https://{host}"
+                await self.fetcher.check_robots(site_url)
+
+            self.running = True  # execution flag
             spiders = [asyncio.create_task(self.spider()) for _ in range(self.num_spiders)]
 
-            await self.frontier.join()  # wait for all crawling to finish
+            await self.frontier.join()  # wait for frontier to be empty
+            self.running = False        # stop spiders
 
-            for s in spiders:
-                s.cancel()  # stop all spiders after done so it doesn't run forever
             await asyncio.gather(*spiders, return_exceptions=True)
 
-            #await self.fetcher.finish(None, None, None)  #  CLOSE not needed?
+            await self.storage.commit()
 
             logger.info("Crawling finished.")
             logger.info(f"Total seen URLs: {len(self.seen)}")
