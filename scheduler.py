@@ -17,7 +17,7 @@ import logging
 
 from fetcher import Fetcher  
 from parser import Parser    
-from storage_async import Storage  
+from storage import Storage  
 
 # logging set up
 logging.basicConfig(
@@ -31,7 +31,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class Scheduler:
-    def __init__(self, max_concurrency, num_spiders):
+    def __init__(self, max_concurrency, num_spiders, max_depth=2):
         self.frontier = asyncio.Queue() # URLs to crawl
         self.seen = set()   # tracks seen URLs
         self.visited = set()    # tracks visited URLs 
@@ -41,28 +41,30 @@ class Scheduler:
 
         self.max_concurrency = max_concurrency
         self.num_spiders = num_spiders
+        self.max_depth=2
 
         self.fetcher = Fetcher(None)
         self.parser = Parser()
         self.storage = Storage ()
  
-    async def add_url(self, url):
+    async def add_url(self, url, depth=0):
         """
-        Add a new URL to the frontier if it hasn't been seen.
+        Add a new URL to the frontier if it hasn't been seen and if depth <= max_depth
         """
         # provo a normalizzare l'url 
         normalized_url = self.parser.normalize_url(url)
-        if normalized_url not in self.seen:
+        if normalized_url not in self.seen and depth <= self.max_depth:
             self.seen.add(normalized_url)
-            await self.frontier.put((normalized_url))
-            logger.info(f"Added URL to frontier: {normalized_url}")
+            await self.frontier.put((normalized_url, depth))
+            logger.info(f"Added URL to frontier: {normalized_url} at depth {depth}")
+
 
     async def seed_urls(self, urls):
         """
         Seeds the initial URL, or list of URLs, into the queue.
         """
         for url in urls:
-            await self.add_url(url)   # passing it to add_url for check
+            await self.add_url(url, depth=0)   # passing it to add_url for check
 
     def get_hostname(self, url):
         """
@@ -75,9 +77,9 @@ class Scheduler:
         Get the next URL from the frontier.
         Wait asynchronously for a URL to be available in the queue.
         """
-        url = await self.frontier.get()
-        logger.info(f"Got URL from frontier: {url}")
-        return url
+        url, depth = await self.frontier.get()
+        logger.info(f"Got URL from frontier: {url} at depth {depth}")
+        return url, depth
 
     def task_done(self):
         """
@@ -86,7 +88,7 @@ class Scheduler:
         self.frontier.task_done()
         logger.info(f"Task done. Frontier size: {self.frontier.qsize()}")
 
-    async def handle_fetch_failure(self, url, exception):
+    async def handle_fetch_failure(self, url, exception, depth):
         """
         Handles a failed fetch attempt: retries up to 2 times.
         """
@@ -94,12 +96,13 @@ class Scheduler:
         self.retries[url] += 1
 
         if self.retries[url] <= 2:
-            logger.info(f"Re-queuing {url} (attempt {self.retries[url]})")
-            await self.frontier.put(url)
+            logger.info(f"Re-queuing {url} (attempt {self.retries[url]}) at depth {depth}")
+            await self.frontier.put((url, depth))
         else:
             logger.info(f"Giving up on {url} after {self.retries[url]} attempts.")
 
-    async def fetch_url(self, url):
+
+    async def fetch_url(self, url, depth):
         """
         Fetches a URL with concurrency and politeness constraints.
         Handles retry on failure.
@@ -116,15 +119,15 @@ class Scheduler:
             
             for link in outlinks:
                 if self.storage.needs_refresh(link):
-                    await self.frontier.add_url(link)
+                    await self.add_url(link, depth + 1)  # Usa add_url per gestire depth correttamente
                     logger.info(f"[FRONTIER] Added {link} from fresh page {url}")
-    
+
             return None  # Skip fetch, ma hai già gestito i suoi link
 
         # enforce both global fetch concurrency and per-host politeness
         async with self.semaphore:
             async with self.host_locks[hostname]:
-                logger.info(f"Fetching {url}")
+                logger.info(f"Fetching {url} at depth {depth}")
                 start_time = time.perf_counter()  # want to measure time taken for each request
                 try:
                     response = await self.fetcher.fetch(url)
@@ -134,24 +137,25 @@ class Scheduler:
                 except aiohttp.ClientError as e:
                     duration = time.perf_counter() - start_time
                     logger.error(f"Fetch failed for {url} after {duration:.2f}s: {e}")
-                    await self.handle_fetch_failure(url, e)
+                    await self.handle_fetch_failure(url, e, depth)
                     return None
                 except aiohttp.client_exceptions.InvalidURL as e:
                     logger.error(f"Invalid URL for {url}: {e}")
-                    await self.handle_fetch_failure(url, e)
+                    await self.handle_fetch_failure(url, e, depth)
                     return None
                 except Exception as e:
                     duration = time.perf_counter() - start_time
                     logger.error(f"Fetch failed for {url} after {duration:.2f}s: {e}")
-                    await self.handle_fetch_failure(url, e)
+                    await self.handle_fetch_failure(url, e, depth)
                     return None
 
-    async def process_response(self, url, response):
+
+    async def process_response(self, url, depth, response):
         """
         Handles a successful fetch: parses, stores, and queues new URLs.
         """
         if not response:
-            logger.warning(f"Empty response for {url}")
+            logger.warning(f"Empty response for {url} at depth {depth}")
             return
 
         try:
@@ -162,7 +166,7 @@ class Scheduler:
 
         # Skip non-successful responses or empty content
         if status != 200 or not content:
-            logger.info(f"Skipping {url} due to status {status} or empty content.")
+            logger.info(f"Skipping {url} due to status {status} or empty content at depth {depth}.")
             return
         
         # Check for near-duplicate
@@ -185,9 +189,11 @@ class Scheduler:
             # Extract and enqueue links found in the page
             links = self.parser.extract_links(content, final_url)
             for link in links:
-                await self.add_url(link)
+                if depth + 1 <= self.max_depth:
+                    await self.add_url(link, depth + 1)
         except Exception as e:
             logger.error(f"Failed to parse links from {final_url}: {e}")
+
 
     async def spider(self):
         """
@@ -195,14 +201,15 @@ class Scheduler:
         """
         while self.running:
             try:
-                url = await asyncio.wait_for(self.get_url(), timeout=5)
+                url, depth = await asyncio.wait_for(self.get_url(), timeout=5)
             except asyncio.TimeoutError:
                 # Se nessuna URL arriva per 5 secondi, esci dal loop
                 break
 
-            response = await self.fetch_url(url)
-            await self.process_response(url, response)
+            response = await self.fetch_url(url, depth)
+            await self.process_response(url, depth, response)
             self.task_done()
+
 
 
     async def run(self, seeds=None):
