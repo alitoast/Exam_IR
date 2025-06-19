@@ -23,7 +23,7 @@ import utils_async
 logger = logging.getLogger(__name__)
 
 class Scheduler:
-    def __init__(self, max_concurrency, num_spiders, max_depth=2):
+    def __init__(self, max_concurrency, num_spiders, max_depth):
         self.frontier = asyncio.Queue()  # URLs to crawl
         self.seen = set()  # tracks seen URLs
         self.visited = set()  # tracks visited URLs
@@ -49,13 +49,20 @@ class Scheduler:
         normalized_url = self.parser.normalize_url(url)
         domain = urlparse(normalized_url).netloc
 
+        # skip excluded domains (add IANA domains here)
+        #if domain in {'example.com', 'iana.org', 'icann.org'}:
+        #    logger.debug(f"Skipping URL from excluded domain: {url}")
+        #    return
+
         # check if we've reached max pages for this domain
         if self.domain_counts[domain] >= self.max_pages_per_domain:
             logger.debug(f"Skipping URL {url} (max pages for domain reached)")
             return
 
         if normalized_url not in self.seen:
-            if current_depth < self.max_depth:
+            # increment depth when adding to frontier
+            next_depth = current_depth + 1
+            if next_depth < self.max_depth:
                 self.seen.add(normalized_url)
                 await self.frontier.put((current_depth + 1, normalized_url))
                 logger.info(f"Added URL to frontier: {normalized_url} at depth {current_depth + 1}")
@@ -234,6 +241,9 @@ class Scheduler:
         """
         if not seeds:
             seeds = ["https://example.com"]
+        
+        start_time = time.time()
+        logger.info(f"Starting crawl at {time.strftime('%H:%M:%S')}")
 
         await self.storage.async_init()
         await self.seed_urls(seeds, initial_depth=0)  # add seeds to frontier
@@ -260,8 +270,10 @@ class Scheduler:
             finally:
                 self.running = False  # stop spiders
 
-            await asyncio.gather(*spiders, return_exceptions=True)
+            duration = time.time() - start_time
+            logger.info(f"Crawling completed after {duration:.2f} seconds")
 
+            await asyncio.gather(*spiders, return_exceptions=True)
             await self.storage.commit()
 
             logger.info("Crawling finished.")

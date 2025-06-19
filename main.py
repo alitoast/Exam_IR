@@ -12,7 +12,7 @@ async def main():
     logging.info("Starting scheduler...")
     max_concurrency = 5
     num_spiders = 3
-    scheduler = Scheduler(max_concurrency, num_spiders)
+    scheduler = Scheduler(max_concurrency, num_spiders, max_depth=2)
 
     logging.info("Running scheduler with seeds.")
     await scheduler.run(seeds=["https://example.com/"])
