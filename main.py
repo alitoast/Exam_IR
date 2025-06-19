@@ -12,10 +12,13 @@ async def main():
     logging.info("Starting scheduler...")
     max_concurrency = 5
     num_spiders = 3
-    scheduler = Scheduler(max_concurrency, num_spiders, max_depth=2)
+    max_depth = 2
+    max_pages_per_domain = 10
+
+    scheduler = Scheduler(max_concurrency, num_spiders, max_depth, max_pages_per_domain)
 
     logging.info("Running scheduler with seeds.")
-    await scheduler.run(seeds=["https://freakontrol.com/"])
+    await scheduler.run(seeds=["https://httpbin.org/"])
     logging.info("Scheduler finished.")
 
 if __name__ == "__main__":
