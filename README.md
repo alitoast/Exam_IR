@@ -1,28 +1,29 @@
-# Web Crawler
+# Web Crawler -Informatin Retrieval Project
 
 ## Overview
-In this project aweb crawler is implemented for the UniTs **Information Retrieval** exam. The crawler will be built in Python, and will be able to:
-* Visit a web page
-* Download the page
-* Parse the HTML and extract links
+
+This project implements a **web crawler** in Python as part of the UniTs *Information Retrieval* exam. The crawler is designed to:
+
+* Visit web pages
+* Download HTML content
+* Parse and extract hyperlinks
+* Respect crawling ethics and site-specific rules
 
 ---
 
-## Best practices
+## Features & Best Practices
 
-**Fairness**:
+### Fairness
 
-* Respect robots.txt (a file that tells bots what they’re allowed to crawl).
+* **robots.txt support**: The crawler checks `robots.txt` and follows the site’s crawling rules.
+* **Politeness policy**: Adds delays between requests to avoid overwhelming servers.
+* **Domain-aware scheduling**: Limits the number of pages fetched per domain.
 
-* Don’t overload websites with too many requests too fast (called politeness).
+### Robustness
 
-* Add a delay between requests to the same site.
-
-**Robustness**:
-
-* Handle broken links, timeouts, or pages that don’t respond.
-
-* Retry or skip gracefully without crashing.
+* Handles broken links, timeouts, and HTTP errors.
+* Implements retries on failure, but avoids infinite loops.
+* Skips duplicate or near-duplicate content using hashing techniques.
 
 ---
 
@@ -30,18 +31,66 @@ In this project aweb crawler is implemented for the UniTs **Information Retrieva
 
 ```
 .
-├── main.py          # Entry point — orchestrates all components
-├── fetcher.py       # Downloads pages, handles robots.txt, headers, errors
-├── parser.py        # Parses HTML, extracts and normalizes links
-├── scheduler.py     # Manages URL queue, visited set, and flow
-├── storage.py       # Saves pages and metadata, handles freshness and deduplication
+├── main.py          # Entry point — launches the scheduler and starts crawling
+├── fetcher.py       # Fetches pages, handles HTTP headers, robots.txt, and retries
+├── parser.py        # Parses HTML and extracts/normalizes links
+├── scheduler.py     # Manages the URL frontier, visited pages, and concurrency
+├── storage.py       # Saves pages and metadata, checks freshness and deduplication
+├── utils_async.py   # Utility functions for async operations
+├── config.py        # # Sets up logging to both console and file (crawler.log)
 ```
+
+---
+
+
+1. **Requirements**
+
+The following Python packages are required:
+
+* `rfc3986`
+* `pandas`
+* `aiohttp`
+* `beautifulsoup4`
+
+You can install them using:
+
+```bash
+pip install rfc3986 pandas aiohttp beautifulsoup4
+```
+
+---
+
+Let me know if you'd prefer this as a `requirements.txt` format or want to add optional/development dependencies too.
+
+
+2. **Run the crawler**:
+
+   ```bash
+   python main.py
+   ```
+
+2. **Configure seeds and parameters** inside `main.py`.
+    
+Parameters: 
+* max_concurrency (int): Global max concurrent fetches.
+* num_spiders (int): Number of concurrent spider tasks.
+* max_depth (int): Maximum crawl depth per seed.
+* max_pages_per_domain (int): Max pages to crawl per domain.
+
+
+**Default is:**
+
+ ```bash
+    max_concurrency = 5
+    num_spiders = 3
+    max_depth = 3
+    max_pages_per_domain = 10
+```
+
 ---
 
 ## Authors
 
-Francesca Bazzo
-
-Eva Fumo
-
-Alice Macuz
+* Francesca Bazzo
+* Eva Fumo
+* Alice Macuz
