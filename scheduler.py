@@ -97,6 +97,11 @@ class Scheduler:
         """
         hostname = self.get_hostname(url)
 
+        # check freshness: skip if still fresh
+        if not self.storage.needs_refresh(url):
+            logger.info(f"Skipping {url} is fresh, skipping fetch.")
+            return None
+
         # enforce both global fetch concurrency and per-host politeness
         async with self.semaphore:
             async with self.host_locks[hostname]:
@@ -139,6 +144,12 @@ class Scheduler:
         # Skip non-successful responses or empty content
         if status != 200 or not content:
             logger.info(f"Skipping {url} due to status {status} or empty content.")
+            return
+
+        # check for near-duplicate
+        is_dup, dup_url = self.storage.is_near_duplicate(content)
+        if is_dup:
+            logger.info(f"Skipping {url} is a near-duplicate of {dup_url}, skipping save.")
             return
 
         try:
