@@ -6,7 +6,17 @@ from urllib.parse import urlparse
 import urllib.robotparser
 import rfc3986
 
+# Logging setup
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    datefmt='%H:%M:%S',
+    filename="fetcher.log",  # log file
+    filemode="a"  # append to the log file ('w' to overwrite)
+)
 logger = logging.getLogger(__name__)
+
+
 
 # questo funziona
 class UserAgentPolicy:

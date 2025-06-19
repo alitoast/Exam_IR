@@ -22,11 +22,24 @@ import time
 import os
 from collections import Counter
 import logging
+from parser import Parser 
 
 from utils_async import calculate_page_type, compute_fingerprint, preprocess, to_gap_encoding, compute_age, hamming_distance
 
+parser = Parser() 
+
+# logging set up
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s", # timestamp, level, message
+    datefmt="%H:%M:%S",
+    filename="crawler_storage.log",  # log file
+    filemode="a"  # append to the log file ('w' to overwrite)
+)
 
 logger = logging.getLogger(__name__)
+
+
 #   Lambda mapping for different page types 
 LAMBDA_BY_TYPE = {
     "frequent": 2.0,
@@ -34,6 +47,8 @@ LAMBDA_BY_TYPE = {
     "static": 0.05,
     "default": 0.5
 }
+
+
 
 class Storage:
 
@@ -113,10 +128,17 @@ class Storage:
         try:
             async with aiofiles.open(filename, "r", encoding="utf-8") as f:
                 content = await f.read()
+            # Se il file è vuoto o contiene solo spazi bianchi, inizializza dict vuoto
+            if not content.strip():
+                logger.warning(f"[LOAD] {filename} is empty — initializing empty dict")
+                return {}
             return await asyncio.to_thread(json.loads, content)
+        except json.JSONDecodeError as e:
+            logger.warning(f"[LOAD] Invalid JSON in {filename} ({e}) — initializing empty dict")
+            return {}
         except Exception as e:
             logger.error(f"Failed to load JSON file {filename}: {e}")
-            return None
+            return {}
 
     async def _save_json_async(self, filename, data):
         if not data:
@@ -151,15 +173,23 @@ class Storage:
             now = time.time()
             page_type = calculate_page_type(content, url)
             fingerprint = compute_fingerprint(content)
+            outlinks = parser.extract_links(content, url) 
             logger.info(f"[PAGE] Computed fingerprint e page_type dopo {time.perf_counter() - mid:.3f} secondi")    
             self.pages[url] = {
                 "fingerprint": fingerprint,
                 "page_type": page_type,
-                "last_fetch": now
-            }
+                "last_fetch": now, 
+                "outlinks": outlinks or [] 
+            }   
             self.dirty = True 
             await self.index_terms(url, content, lock_acquired=True)
             logger.info(f"[PAGE] Indexed terms e aggiornato struttura dopo {time.perf_counter() - mid:.3f} secondi")
+
+    def get_outlinks(self, url):
+        page = self.pages.get(url)
+        if page:
+            return page.get("outlinks", [])
+        return []
 
 
     async def index_terms(self, url, content, lock_acquired=False):
@@ -206,9 +236,11 @@ class Storage:
         logger.debug(f"[INDEX] Updated index with {len(tf)} unique terms for {url}")
         # await self._save_json_async(self.index_file, self.inverted_index)
 
+    #   non viene mai chiamata qui, forse da cancellare? 
     def get_page(self, url):
         return self.pages.get(url)
 
+    #   non viene mai chiamata qui, forse da cancellare? 
     def get_page_type(self, url):
         page = self.pages.get(url)
         if page:
@@ -270,3 +302,15 @@ class Storage:
             logger.debug("index_file salvato")
 
         logger.info("Files pages.json and inverted_index.json saved!")
+
+
+
+
+
+
+
+
+
+
+
+

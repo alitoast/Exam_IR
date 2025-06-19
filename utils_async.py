@@ -9,8 +9,6 @@ utilities for gap-encoded positional data. Additionally, it offers heuristics to
 based on URL and content keywords, and methods to compute aging metrics for content freshness. 
 These helper functions encapsulate reusable logic for natural language processing and data handling 
 to support higher-level storage and indexing operations.
-
-
 """
 
 
@@ -18,6 +16,7 @@ to support higher-level storage and indexing operations.
 import asyncio
 import numpy as np 
 import nltk 
+import time 
 from collections import Counter
 from simhash import Simhash 
 from nltk import pos_tag, word_tokenize
@@ -30,9 +29,11 @@ logger = logging.getLogger(__name__)
 
 
 #   Functions imported from other modules of the project
+from fetcher import Fetcher 
+from parser import Parser 
 
-from fetcher import Fetcher
-from parser import Parser
+fetcher = Fetcher(None) 
+parser = Parser() 
 
 #   Check if the necessary NLTK resources have been downloaded. Otherwise, download them.
 for resource in ["stopwords", "wordnet", "punkt", "averaged_perceptron_tagger", "omw-1.4"]:
@@ -42,22 +43,17 @@ for resource in ["stopwords", "wordnet", "punkt", "averaged_perceptron_tagger", 
         nltk.download(resource, quiet=True)
 
 
-
 #   Words to remove during preprocessing 
 NUMBER_WORDS = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten']
-
 
 
 def get_wordnet_pos(tag):
     """
     Maps POS tag to WordNet format.
-
-    Input:
+    Input: 
         tag (str): POS tag in Penn Treebank format.
-
     Output:
         WordNet POS tag constant (e.g., NOUN, VERB, ADJ, ADV).
-
     Description:
         Converts common Penn Treebank POS tags to the corresponding
         WordNet POS constants used for lemmatization.
@@ -73,13 +69,10 @@ def preprocess_sync(text):
     """
     Synchronously preprocesses text by tokenizing, filtering, POS tagging,
     and lemmatizing.
-
     Input:
         text (str): Raw input text.
-
     Output:
         list of str: Preprocessed and lemmatized tokens.
-
     Description:
         Performs tokenization, removes stopwords and numeric words, tags POS,
         and lemmatizes tokens to their base form.
@@ -96,48 +89,47 @@ async def preprocess(text):
     """
     Asynchronously preprocesses text by running synchronous preprocessing
     in a separate thread.
-
     Input:
         text (str): Raw input text.
-
     Output:
         list of str: Preprocessed and lemmatized tokens.
-
     Description:
         Wraps synchronous preprocessing to avoid blocking the async event loop.
     """
-    return await asyncio.to_thread(preprocess_sync, text)
+    start = time.perf_counter()
+    result = await asyncio.to_thread(preprocess_sync, text) 
+    end = time.perf_counter() 
+    logger.info(f"[PREPROCESS] Text processed in {end - start:.3f} seconds")
+    return result
 
 
 async def content_page(url):
     """
     Fetches HTML content from a URL asynchronously and parses text content.
-
     Input:
         url (str): URL of the webpage.
-
     Output:
         str: Concatenated textual content extracted from the page.
-
     Description:
         Uses asynchronous fetch and synchronous parser to retrieve and process
         page content for indexing or analysis.
     """
-    html = await fetch(url)
-    text_from_page = parse_page_tags_all(html)
+    start = time.perf_counter()
+    html = await fetcher.fetch(url)
+    mid = time.perf_counter() 
+    text_from_page = parser.parse_page_tags_all(html)
+    end = time.perf_counter()
+    logger.info(f"[FETCH] Fetch: {mid - start:.3f}s, Parse: {end - mid:.3f}s")
     return ' '.join(text_from_page)
 
 
 def compute_fingerprint(text):
     """ 
         Computes a 64-bit Simhash fingerprint for a given text.
-
     Input:
         text (str): Text to fingerprint.
-
     Output:
         int: Simhash fingerprint value.
-
     Description:
         Uses synchronous preprocessing to tokenize and lemmatize the text,
         then computes a Simhash to represent the text compactly for near-duplicate detection.
@@ -149,14 +141,11 @@ def compute_fingerprint(text):
 def hamming_distance(fp1, fp2):
     """
     Computes the Hamming distance between two 64-bit integer fingerprints.
-
     Input:
         fp1 (int): First fingerprint.
         fp2 (int): Second fingerprint.
-
     Output:
         int: Number of differing bits.
-
     Description:
         Counts differing bits between two fingerprints to measure similarity.
     """
@@ -171,14 +160,11 @@ def hamming_distance(fp1, fp2):
 def compute_age(lambda_, t):
     """
     Computes the age of content using an exponential decay model.
-
     Input:
         lambda_ (float): Decay rate parameter.
         t (float): Time since last fetch (e.g., in days).
-
     Output:
         float: Computed age score.
-
     Description:
         Models content freshness with an aging function based on decay lambda.
     """
@@ -190,14 +176,11 @@ def compute_age(lambda_, t):
 def calculate_page_type(content, url=""):
     """
     Classifies a page type based on URL and content heuristics.
-
     Input:
         content (str): Text content of the page.
         url (str): URL of the page (optional).
-
     Output:
         str: One of "frequent", "occasional", "static", or "default".
-
     Description:
         Uses keywords and URL patterns to assign a frequency category to the page.
     """
@@ -232,13 +215,10 @@ def calculate_page_type(content, url=""):
 def from_gap_encoding(gaps):
     """
     Decodes a list of gap-encoded positions back into absolute positions.
-
     Input:
         gaps (list of int): Gap-encoded positions.
-
     Output:
         list of int: Absolute positions.
-
     Description:
         Reconstructs absolute token positions from gap-encoded format.
     """
@@ -253,13 +233,10 @@ def from_gap_encoding(gaps):
 def to_gap_encoding(positions):
     """
     Encodes a list of absolute positions into gap-encoded format.
-
     Input:
         positions (list of int): Absolute token positions.
-
     Output:
         list of int: Gap-encoded positions.
-
     Description:
         Compresses positions by storing gaps between successive positions.
     """

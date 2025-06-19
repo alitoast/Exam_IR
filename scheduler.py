@@ -43,10 +43,12 @@ class Scheduler:
         """
         Add a new URL to the frontier if it hasn't been seen and within depth limit.
         """
-        if url not in self.seen and current_depth < self.max_depth:
-            self.seen.add(url)
-            await self.frontier.put((current_depth, url))
-            logger.debug(f"Added URL to frontier: {url} at depth {current_depth}")
+        # provo a normalizzare l'url 
+        normalized_url = self.parser.normalize_url(url)
+        if normalized_url not in self.seen:
+            self.seen.add(normalized_url)
+            await self.frontier.put((normalized_url))
+            logger.info(f"Added URL to frontier: {normalized_url}")
         else:
             logger.debug(f"Skipping URL {url} at depth {current_depth} (max depth reached or already seen)")
 
@@ -106,8 +108,18 @@ class Scheduler:
 
         # check freshness: skip if still fresh
         if not self.storage.needs_refresh(url):
-            logger.info(f"Skipping {url} is fresh, skipping fetch.")
-            return None
+            logger.info(f"[SKIP] {url} is fresh, not fetching again.")
+            
+            # Controlla e gestisci gli outlink già estratti da quella pagina
+            outlinks = self.storage.get_outlinks(url)
+            logger.info(f"[OUTLINKS] Checking {len(outlinks)} links from fresh page: {url}")
+            
+            for link in outlinks:
+                if self.storage.needs_refresh(link):
+                    await self.frontier.add_url(link)
+                    logger.info(f"[FRONTIER] Added {link} from fresh page {url}")
+    
+            return None  # Skip fetch, ma hai già gestito i suoi link
 
         # enforce both global fetch concurrency and per-host politeness
         async with self.semaphore:
