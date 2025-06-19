@@ -210,7 +210,7 @@ class Parser:
      normalized_urls = [self.normalize_url(url) for url in absolute_urls]
 
      # Filtra per robots.txt disallow
-     if useragent and hasattr(useragent, 'path_disallow'):
+     if useragent.path_disallow != None:
         disallowed = useragent.path_disallow
         normalized_urls = [
             url for url in normalized_urls
