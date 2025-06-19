@@ -47,7 +47,7 @@ class Scheduler:
         normalized_url = self.parser.normalize_url(url)
         if normalized_url not in self.seen:
             self.seen.add(normalized_url)
-            await self.frontier.put((normalized_url))
+            await self.frontier.put((current_depth, normalized_url))
             logger.info(f"Added URL to frontier: {normalized_url}")
         else:
             logger.debug(f"Skipping URL {url} at depth {current_depth} (max depth reached or already seen)")
@@ -116,14 +116,14 @@ class Scheduler:
             
             for link in outlinks:
                 if self.storage.needs_refresh(link):
-                    await self.frontier.add_url(link)
+                    await self.frontier.add_url(link, current_depth + 1)
                     logger.info(f"[FRONTIER] Added {link} from fresh page {url}")
     
             return None  # Skip fetch, ma hai già gestito i suoi link
 
         # enforce both global fetch concurrency and per-host politeness
         async with self.semaphore:
-            async with lock[hostname]:
+            async with lock:
                 logger.info(f"Fetching {url}")
                 start_time = time.perf_counter()  # want to measure time taken for each request
                 try:
