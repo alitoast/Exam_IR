@@ -1,13 +1,16 @@
 """
-implement async crawler to avoid blocking on requests.
+Async Scheduler for a web crawler.
+Manages URL frontier, fetch concurrency, depth/budget limits, retry logic,
+duplicate detection, and delegation to fetcher, parser, and storage subsystems.
 
-max_concurrent: Limits simultaneous fetches (via semaphore)
-
-num_spiders: Number of async crawling tasks running concurrently
-
-maybe defaultdict for lock and retries ain't a good idea, to see if it's best to 
-place general dictionary 
+Key features:
+- Async crawling using asyncio/aiohttp
+- Per-host politeness via asyncio.Lock()
+- Global concurrency limit via asyncio.Semaphore()
+- Retry mechanism
+- Depth & per-domain page budget control
 """
+
 import asyncio
 import aiohttp
 import time
@@ -24,14 +27,23 @@ logger = logging.getLogger(__name__)
 
 class Scheduler:
     def __init__(self, max_concurrency, num_spiders, max_depth, max_pages_per_domain):
-        # initialize containers first
+        """
+        Initializes the crawler scheduler.
+
+        Args:
+            max_concurrency (int): Global max concurrent fetches.
+            num_spiders (int): Number of concurrent spider tasks.
+            max_depth (int): Maximum crawl depth per seed.
+            max_pages_per_domain (int): Max pages to crawl per domain.
+        """
+
         self.frontier = asyncio.Queue() # URLs to crawl
         self.seen = set()               # tracks seen URLs
         self.visited = set()            # tracks visited URLs
 
         # initialize synchronization primitives
-        self.semaphore = asyncio.Semaphore(max_concurrency)  # limits max parallel fetches
-        self.host_locks = {}                        # ensures one fetch per host at a time
+        self.semaphore = asyncio.Semaphore(max_concurrency)  # global concurrency limit
+        self.host_locks = {}    # per-host locks for politeness
 
         # initialize tracking dictionaries
         self.retries = defaultdict(int)  # dictionary keeps count of how many times retried each URL
@@ -49,22 +61,22 @@ class Scheduler:
 
     async def add_url(self, url, current_depth):
         """
-        Add a new URL to the frontier if it hasn't been seen and within depth limit.
+        Adds a URL to the frontier queue if unseen and within limits.
+
+        Args:
+            url (str): The URL to add.
+            current_depth (int): Current depth of crawling.
         """
         # url normalization 
         normalized_url = self.parser.normalize_url(url)
         domain = urlparse(normalized_url).netloc
-
-        # skip excluded domains (add IANA domains here)
-        #if domain in {'example.com', 'iana.org', 'icann.org'}:
-        #    logger.debug(f"Skipping URL from excluded domain: {url}")
-        #    return
 
         # check if we've reached max pages for this domain
         if self.domain_counts[domain] >= self.max_pages_per_domain:
             logger.debug(f"Skipping URL {url} (max pages for domain reached)")
             return
 
+        # add to queue only if unseen and depth is within limit
         if normalized_url not in self.seen:
             # increment depth when adding to frontier
             next_depth = current_depth + 1
@@ -74,7 +86,7 @@ class Scheduler:
                 logger.info(f"Added URL to frontier: {normalized_url} at depth {current_depth + 1}")
                 self.domain_counts[domain] += 1
 
-                # Update the page metadata with current_depth
+                # attach crawl depth to storage metadata if available
                 if url in self.storage.pages:
                     self.storage.pages[url]['current_depth'] = next_depth - 1
             else:
@@ -84,7 +96,11 @@ class Scheduler:
 
     async def seed_urls(self, urls, initial_depth=0):
         """
-        Seeds the initial URL, or list of URLs, into the queue.
+        Seeds initial URLs into the frontier queue.
+
+        Args:
+            urls (list): List of seed URLs.
+            initial_depth (int): Depth level to start from.
         """
         for url in urls:
             await self.add_url(url, initial_depth)  # passing it to add_url for check
@@ -97,8 +113,10 @@ class Scheduler:
 
     async def get_url(self):
         """
-        Get the next URL from the frontier.
-        Wait asynchronously for a URL to be available in the queue.
+        Retrieves the next URL from the frontier queue.
+
+        Returns:
+            tuple: (url, depth)
         """
         current_depth, url = await self.frontier.get()
         logger.debug(f"Got URL from frontier: {url} at depth {current_depth}")
@@ -106,14 +124,14 @@ class Scheduler:
 
     def task_done(self):
         """
-        Mark the current task as completed in the frontier.
+        Marks a frontier task as complete.
         """
         self.frontier.task_done()
         logger.debug(f"Task done. Frontier size: {self.frontier.qsize()}")
 
     async def handle_fetch_failure(self, url, depth, exception):
         """
-        Handles a failed fetch attempt: retries up to 2 times.
+        Handles fetch failure with up to 2 retries.
         """
         logger.error(f"Fetch failed for {url}: {exception}")
         self.retries[url] += 1
@@ -126,8 +144,14 @@ class Scheduler:
 
     async def fetch_url(self, url, initial_depth):
         """
-        Fetches a URL with concurrency and politeness constraints.
-        Handles retry on failure.
+        Fetches the URL with concurrency and politeness constraints.
+
+        Args:
+            url (str): URL to fetch.
+            initial_depth (int): Fallback crawl depth.
+
+        Returns:
+            tuple | None: (content, final_url, status), or None if failed
         """
         hostname = self.get_hostname(url)
 
@@ -140,23 +164,22 @@ class Scheduler:
         if not self.storage.needs_refresh(url):
             logger.info(f"[SKIP] {url} is fresh, not fetching again.")
 
-            # Get the current depth from storage (fallback to 0)
+            # get the current depth from storage
             page = self.storage.get_page(url)
             current_depth = getattr(page, 'current_depth', initial_depth)
             
-            # Controlla e gestisci gli outlink già estratti da quella pagina
+            # check and handle outlinks if necessary
             outlinks = self.storage.get_outlinks(url)
             logger.info(f"[OUTLINKS] Checking {len(outlinks)} links from fresh page: {url}")
             
             for link in outlinks:
                 if self.storage.needs_refresh(link):
-                    # Use current_depth + 1 with fallback to max_depth
                     next_depth = min(current_depth + 1, self.max_depth)
                     await self.add_url(link, next_depth)
     
-            return None  # Skip fetch, ma hai già gestito i suoi link
+            return None  # skip fetch, links already handled
 
-        # enforce both global fetch concurrency and per-host politeness
+        # acquire both global and per-host locks
         async with self.semaphore:
             async with lock:
                 logger.info(f"Fetching {url}")
@@ -183,7 +206,12 @@ class Scheduler:
 
     async def process_response(self, url, response, current_depth):
         """
-        Handles a successful fetch: parses, stores, and queues new URLs.
+        Processes a successful fetch: saves, parses, and queues outlinks.
+
+        Args:
+            url (str): Original URL.
+            response (tuple): (content, final_url, status)
+            current_depth (int): Crawl depth.
         """
         if not response:
             logger.warning(f"Empty response for {url}")
@@ -215,11 +243,10 @@ class Scheduler:
             logger.error(f"Failed to save {final_url}: {e}")
             return
 
-        # mark as successfully visited only after processing
         self.visited.add(final_url)
 
+        # parse and enqueue outlinks
         try:
-            # extract and enqueue links found in the page
             links = self.parser.extract_links(content, final_url,
                                         sitemaps_urls=self.storage.get_outlinks(final_url),
                                         useragent=self.fetcher.default_agent)
@@ -230,14 +257,13 @@ class Scheduler:
 
     async def spider(self):
         """
-        Spider that pulls a URL, fetches it, parses it, and queues new links.
+        Worker task that fetches, processes, and recurses over URLs.
         """
         while self.running:
             try:
                 url, current_depth = await asyncio.wait_for(self.get_url(), timeout=5)
             except asyncio.TimeoutError:
-                # if no URL for 5 seconds, exit loop
-                break
+                break # if no URL for 5 seconds, exit loop
 
             try:
                 response = await self.fetch_url(url,current_depth)
@@ -249,10 +275,10 @@ class Scheduler:
 
     async def run(self, seeds=None):
         """
-        Starts the crawling loop with multiple concurrent spiders.
-        Creates num_spiders number of tasks.
-        Each one runs self.worker(fetcher, parser)
-        Uses asyncio.create_task() to run them concurrently
+        Entry point to start the crawl.
+
+        Args:
+            seeds (list): Initial list of seed URLs.
         """
         if not seeds:
             seeds = ["https://example.com"]
@@ -264,12 +290,11 @@ class Scheduler:
         await self.seed_urls(seeds, initial_depth=0)  # add seeds to frontier
 
         async with aiohttp.ClientSession() as session:
-            # initialize fetcher with the session
-            self.fetcher = Fetcher(session) 
+            self.fetcher = Fetcher(session)    # initialize fetcher with the session
 
-            # Get the default user agent from the fetcher
+            # get the default user agent from the fetcher
             user_agent = self.fetcher.default_agent
-
+            # check robots.txt for all seed hosts
             unique_hosts = {urlparse(url).netloc for url in seeds}
             for host in unique_hosts:
                 site_url = f"https://{host}"
@@ -283,7 +308,7 @@ class Scheduler:
             except asyncio.TimeoutError:
                 logger.warning("Frontier join timed out, stopping spiders")
             finally:
-                self.running = False  # stop spiders
+                self.running = False  # signal spiders to exit
 
             duration = time.time() - start_time
             logger.info(f"Crawling completed after {duration:.2f} seconds")
