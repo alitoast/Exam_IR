@@ -18,7 +18,7 @@ async def main():
     scheduler = Scheduler(max_concurrency, num_spiders, max_depth, max_pages_per_domain)
 
     logging.info("Running scheduler with seeds.")
-    await scheduler.run(seeds=["https://httpbin.org/"])
+    await scheduler.run(seeds=["https://example.com"])
     logging.info("Scheduler finished.")
 
 if __name__ == "__main__":
